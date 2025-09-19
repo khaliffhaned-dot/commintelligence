@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRVAIL</title>
+    <link rel="stylesheet" href="index.css">
+    <link rel="icon" href="https://assets.codepen.io/33946/prvail-logo-icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+<script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^1.12.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="landing-page">
+        <header class="landing-header">
+            <div class="landing-logo">PRVAIL</div>
+            <nav class="landing-nav">
+                <button id="launch-button" class="btn btn--primary">
+                    Launch Dashboard
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                </button>
+            </nav>
+        </header>
+        <main class="landing-hero">
+            <h1 class="hero-headline">The New Standard in <span class="ai-highlight">Communications Intelligence</span> for Malaysia</h1>
+            <p class="hero-subheadline">PRVAIL is a specialized intelligence platform for Public Relations and Corporate Affairs professionals. Our methodology empowers you to Listen, Understand, Predict, and Influence.</p>
+        </main>
+         <section class="landing-features">
+            <div class="features-inner-container">
+                <h2 class="features-headline">A Complete Intelligence Toolkit</h2>
+                <p class="features-subheadline">PRVAIL is composed of six integrated modules, each designed to address a specific function within the modern Malaysian PR workflow.</p>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-card__header">
+                            <div class="feature-card__icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hearing"><path d="M4.5 12H2a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h2.5"/><path d="M15 13.1c.9-1.3 1.5-2.9 1.5-4.6 0-4.1-3.3-7.5-7.5-7.5S1.5 4.4 1.5 8.5c0 1.7.6 3.3 1.5 4.6L7 17v3.5a1.5 1.5 0 0 0 3 0V17l3.5-3.9Z"/><path d="M12.5 6.5A2.5 2.5 0 0 1 15 9"/><path d="M18.5 3.5A6.5 6.5 0 0 1 22 10"/></svg>
+                            </div>
+                             <span class="feature-card__tag">Listen</span>
+                        </div>
+                        <h3 class="feature-card__title">Signal: The Real-Time Intelligence Engine</h3>
+                        <p class="feature-card__description">Taps into every conceivable Malaysian digital channel to capture the complete signal, using AI to analyze text, images, and video, and instantly alerting PR teams to emerging trends or nascent crises.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-card__header">
+                            <div class="feature-card__icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield-check"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                            </div>
+                            <span class="feature-card__tag">Understand</span>
+                        </div>
+                        <h3 class="feature-card__title">Veritas: The Narrative Integrity Shield</h3>
+                        <p class="feature-card__description">Goes beyond simple fact-checking to detect multi-modal disinformation and 'fitnah' that can spread rapidly in the Malaysian social fabric, mapping its origin and predicting future threats for pre-emptive counter-messaging.</p>
+                    </div>
+                    <div class="feature-card">
+                         <div class="feature-card__header">
+                            <div class="feature-card__icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map-pin"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                            </div>
+                            <span class="feature-card__tag">Listen & Understand</span>
+                        </div>
+                        <h3 class="feature-card__title">NusaPulse: Hyperlocal Intelligence Dashboard</h3>
+                        <p class="feature-card__description">A live, interactive dashboard for monitoring real-time sentiment, media buzz, and trending topics across the entire Malaysian landscape, with drill-down capabilities for every state and major urban center.</p>
+                    </div>
+                    <div class="feature-card">
+                         <div class="feature-card__header">
+                            <div class="feature-card__icon">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-landmark"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
+                            </div>
+                            <span class="feature-card__tag">Understand & Predict</span>
+                        </div>
+                        <h3 class="feature-card__title">Nexus: The Policy & Stakeholder Forecaster</h3>
+                        <p class="feature-card__description">Automates the monitoring of Malaysian legislative and governmental affairs, using AI to summarize complex policy, predict its impact, and map key stakeholders for strategic government relations.</p>
+                    </div>
+                    <div class="feature-card">
+                         <div class="feature-card__header">
+                            <div class="feature-card__icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-siren"><path d="M12 2c-.3 0-.6.1-.8.2-.5.3-.8.8-.9 1.3l-2.5 9.1c-.2.5-.1 1.1.1 1.6.3.5.7.9 1.2 1.1l.2.1h0c.2.1.4.1.6.1h6.2c.2 0 .4 0 .6-.1h0l.2-.1c.5-.2.9-.6 1.2-1.1.3-.5.3-1.1.1-1.6l-2.5-9.1c-.1-.5-.4-1-.9-1.3C12.6 2.1 12.3 2 12 2Z"/><path d="M6 16.5c-2-1.5-3-4-2-7"/><path d="M18 16.5c2-1.5 3-4 2-7"/><path d="M12 22v-3"/><path d="M8 22h8"/></svg>
+                            </div>
+                            <span class="feature-card__tag">Predict & Influence</span>
+                        </div>
+                        <h3 class="feature-card__title">Aegis: The Reputation Command & Crisis AI</h3>
+                        <p class="feature-card__description">Provides a predictive, real-time reputation score (measuring brand 'maruah' or dignity), offers AI-powered crisis simulations tailored to the Malaysian context, and instantly generates first-response communication plans.</p>
+                    </div>
+                    <div class="feature-card">
+                         <div class="feature-card__header">
+                            <div class="feature-card__icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-megaphone"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                            </div>
+                            <span class="feature-card__tag">Influence</span>
+                        </div>
+                        <h3 class="feature-card__title">Amplify: The Strategic Influence & Comms Suite</h3>
+                        <p class="feature-card__description">Builds psychographic audience segments of the Malaysian population, recommends high-impact content themes, assists in crafting resonant copy, and identifies key local journalists and influencers (KOLs).</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <footer class="landing-footer">
+            <div class="footer-links">
+                <a href="#" id="terms-link" role="button">Terms of Service</a>
+                <a href="#" id="privacy-link" role="button">Privacy Policy</a>
+                <a href="#" id="disclaimer-link" role="button">Responsible AI Disclaimer</a>
+            </div>
+            <p class="footer-copyright">&copy; 2025 Nostradamus Communication All Rights Reserved.</p>
+        </footer>
+    </div>
+
+    <div id="app-container" class="hidden">
+        <!-- App is rendered here by index.tsx -->
+    </div>
+
+    <!-- Reusable Info Modal -->
+    <div id="info-modal-overlay" class="modal-overlay">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 id="info-modal-title"></h3>
+                <button id="info-modal-close" class="modal__close-btn" aria-label="Close modal">&times;</button>
+            </div>
+            <div class="modal__body" id="info-modal-content">
+                <!-- Content injected by JS -->
+            </div>
+        </div>
+    </div>
+    
+    <div id="confirmation-modal-overlay" class="modal-overlay">
+        <div class="modal">
+            <div class="modal__header">
+                <h3 id="confirmation-modal-title">Confirm Action</h3>
+            </div>
+            <div class="modal__body">
+                <p id="confirmation-modal-message">Are you sure you want to proceed? This action cannot be undone.</p>
+            </div>
+            <div class="modal__footer">
+                <button id="confirmation-cancel-button" class="btn btn--secondary">Cancel</button>
+                <button id="confirmation-confirm-button" class="btn btn--danger">Confirm</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="add-client-modal-overlay" class="modal-overlay">
+        <div class="modal">
+            <div class="modal__header">
+                <h3>Add New Client</h3>
+                <button id="add-client-modal-close" class="modal__close-btn" aria-label="Close modal">&times;</button>
+            </div>
+            <div class="modal__body">
+                <div class="form-group">
+                    <label>Client Logo</label>
+                    <div class="logo-uploader">
+                        <input type="file" id="add-client-logo-input" class="logo-uploader__input" accept="image/png, image/jpeg, image/svg+xml">
+                        <div id="add-client-logo-dropzone" class="logo-uploader__dropzone">
+                            <div class="logo-uploader__prompt">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                <span>Upload Logo</span>
+                            </div>
+                        </div>
+                        <div id="add-client-logo-preview" class="logo-uploader__preview hidden">
+                            <img id="add-client-logo-preview-img" src="" alt="Client logo preview">
+                            <button id="add-client-logo-remove-btn" type="button" class="btn btn--icon logo-uploader__remove-btn" aria-label="Remove logo">&times;</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="client-name-input">Client Name</label>
+                    <input type="text" id="client-name-input" class="form-input" placeholder="e.g., Apex Innovations">
+                </div>
+                <div class="form-group">
+                    <label for="client-industry-input">Industry</label>
+                    <input type="text" id="client-industry-input" class="form-input" placeholder="e.g., Technology">
+                </div>
+            </div>
+            <div class="modal__footer">
+                <button id="add-client-cancel-button" class="btn btn--secondary">Cancel</button>
+                <button id="add-client-save-button" class="btn btn--primary">Add Client</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit-client-modal-overlay" class="modal-overlay">
+        <div class="modal">
+            <div class="modal__header">
+                <h3>Edit Client</h3>
+                <button id="edit-client-modal-close" class="modal__close-btn" aria-label="Close modal">&times;</button>
+            </div>
+            <div class="modal__body">
+                <div class="form-group">
+                    <label>Client Logo</label>
+                    <div class="logo-uploader">
+                        <input type="file" id="edit-client-logo-input" class="logo-uploader__input" accept="image/png, image/jpeg, image/svg+xml">
+                        <div id="edit-client-logo-dropzone" class="logo-uploader__dropzone">
+                             <div class="logo-uploader__prompt">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                <span>Upload Logo</span>
+                            </div>
+                        </div>
+                        <div id="edit-client-logo-preview" class="logo-uploader__preview hidden">
+                            <img id="edit-client-logo-preview-img" src="" alt="Client logo preview">
+                            <button id="edit-client-logo-remove-btn" type="button" class="btn btn--icon logo-uploader__remove-btn" aria-label="Remove logo">&times;</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="edit-client-name-input">Client Name</label>
+                    <input type="text" id="edit-client-name-input" class="form-input" placeholder="e.g., Apex Innovations">
+                </div>
+                <div class="form-group">
+                    <label for="edit-client-industry-input">Industry</label>
+                    <input type="text" id="edit-client-industry-input" class="form-input" placeholder="e.g., Technology">
+                </div>
+            </div>
+            <div class="modal__footer">
+                <button id="edit-client-cancel-button" class="btn btn--secondary">Cancel</button>
+                <button id="edit-client-save-button" class="btn btn--primary">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <!-- Make sure you put this AFTER Leaflet's CSS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+    
+    <!-- PDF Generation Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoVBL5gI9kDXrdkl6MHAbpZccPZRlA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha512-qZvrmS2ekKPF2mSznTQsxqPgnpkI4D7lrdigTBzIP5v1rygGDDYUUVbOkxSY89eCFaXV3icpcQVTewdmIdwzYg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <!-- Charting Library -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+    <script type="module" src="index.tsx"></script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
