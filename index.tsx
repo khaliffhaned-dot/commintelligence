@@ -34,6 +34,15 @@ const appState = {
     cache: {} as { [key: string]: any }, // Cache for API responses
     signalFeedIntervalId: null as any, // To manage the real-time feed simulation
     modalLogoDataUrl: null as string | null, // Temp storage for logo uploads
+    signalFeedFocus: 'all' as string, // Topic focus for the real-time feed: 'all', 'BN', 'PH', 'PN'
+    nusaPulseMode: 'brand' as 'brand' | 'political', // Regional Map mode: brand intelligence vs. political sentiment
+    nusaPulsePartyFocus: 'BN' as string, // Coalition focus when nusaPulseMode is 'political'
+};
+
+const COALITION_NAMES: { [key: string]: string } = {
+    BN: 'Barisan Nasional (BN)',
+    PH: 'Pakatan Harapan (PH)',
+    PN: 'Perikatan Nasional (PN)',
 };
 
 
@@ -197,55 +206,115 @@ document.addEventListener('DOMContentLoaded', () => {
         /**
          * Renders the NusaPulse (Market Intelligence) dashboard.
          */
+        /** Renders the toolbar for switching the Regional Map between Brand and Political modes. */
+        function renderNusaPulseToolbarHtml(): string {
+            const mode = appState.nusaPulseMode;
+            const party = appState.nusaPulsePartyFocus;
+            return `
+                <div class="nusapulse-toolbar">
+                    <div class="toggle-group">
+                        <button class="toggle-btn ${mode === 'brand' ? 'active' : ''}" data-mode="brand" type="button">Brand</button>
+                        <button class="toggle-btn ${mode === 'political' ? 'active' : ''}" data-mode="political" type="button">Political Parties</button>
+                    </div>
+                    ${mode === 'political' ? `
+                    <select id="nusapulse-party-select" class="form-select">
+                        <option value="BN" ${party === 'BN' ? 'selected' : ''}>Barisan Nasional (BN)</option>
+                        <option value="PH" ${party === 'PH' ? 'selected' : ''}>Pakatan Harapan (PH)</option>
+                        <option value="PN" ${party === 'PN' ? 'selected' : ''}>Perikatan Nasional (PN)</option>
+                    </select>` : ''}
+                </div>
+            `;
+        }
+
+        function attachNusaPulseToolbarListeners() {
+            document.querySelectorAll('.nusapulse-toolbar .toggle-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const newMode = (btn as HTMLElement).dataset.mode as 'brand' | 'political';
+                    if (newMode !== appState.nusaPulseMode) {
+                        appState.nusaPulseMode = newMode;
+                        renderNusaPulseMapView();
+                    }
+                });
+            });
+            document.getElementById('nusapulse-party-select')?.addEventListener('change', (e) => {
+                appState.nusaPulsePartyFocus = (e.target as HTMLSelectElement).value;
+                renderNusaPulseMapView();
+            });
+        }
+
         async function renderNusaPulseMapView() {
             const container = document.getElementById('nusapulse-map-view');
             if (!container) return;
+            const mode = appState.nusaPulseMode;
+            const party = appState.nusaPulsePartyFocus;
 
-            if (!appState.currentClient) {
-                container.innerHTML = `<div class="empty-state">
+            if (mode === 'brand' && !appState.currentClient) {
+                container.innerHTML = `
+                    <div class="view-header">
+                        <div><h2>NusaPulse: Regional Map</h2></div>
+                        ${renderNusaPulseToolbarHtml()}
+                    </div>
+                    <div class="empty-state">
                     <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     <h3>No Client Selected</h3>
-                    <p>Please select a client from the switcher above, or add a new client to get started.</p>
+                    <p>Please select a client from the switcher above, add a new client, or switch to "Political Parties" mode above.</p>
                     <button id="mi-go-to-clients-btn" class="btn btn--primary">Go to Client Management</button>
                 </div>`;
                 document.getElementById('mi-go-to-clients-btn')?.addEventListener('click', () => {
                     switchView('clients-view');
                 });
+                attachNusaPulseToolbarListeners();
                 return;
             }
 
-            const cacheKey = `${appState.currentClientId}-nusapulseMap`;
+            const cacheKey = mode === 'brand' ? `${appState.currentClientId}-nusapulseMap` : `political-${party}-nusapulseMap`;
             if (appState.cache[cacheKey]) {
                 renderNusaPulseMapContent(appState.cache[cacheKey]);
                 return;
             }
 
-            container.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Generating NusaPulse Report for ${appState.currentClient.name}...</p></div>`;
-            
+            const loadingLabel = mode === 'brand' ? appState.currentClient!.name : COALITION_NAMES[party];
+            container.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Generating NusaPulse Report for ${loadingLabel}...</p></div>`;
+
             try {
-                const data = await fetchMarketIntelligenceData(appState.currentClient);
+                const data = mode === 'brand'
+                    ? await fetchMarketIntelligenceData(appState.currentClient!)
+                    : await fetchPartyRegionalData(party);
                 appState.cache[cacheKey] = data;
                 renderNusaPulseMapContent(data);
             } catch(error) {
                 console.error("Failed to fetch market intelligence data", error);
-                container.innerHTML = `<div class="empty-state">
+                container.innerHTML = `
+                    <div class="view-header">
+                        <div><h2>NusaPulse: Regional Map</h2></div>
+                        ${renderNusaPulseToolbarHtml()}
+                    </div>
+                    <div class="empty-state">
                     <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                     <h3>Analysis Failed</h3>
                     <p class="error-message">Could not generate the NusaPulse report. The backend service may be unavailable.</p>
                 </div>`;
+                attachNusaPulseToolbarListeners();
             }
         }
 
         function renderNusaPulseMapContent(data: any) {
             const container = document.getElementById('nusapulse-map-view');
-            if (!container || !appState.currentClient) return;
+            if (!container) return;
+            const mode = appState.nusaPulseMode;
+            const subtitle = mode === 'brand'
+                ? `Hyperlocal intelligence for ${appState.currentClient?.name} across Malaysia.`
+                : `Regional public sentiment for ${COALITION_NAMES[appState.nusaPulsePartyFocus]} across Malaysia.`;
             container.innerHTML = `
                  <div class="view-header">
                     <div>
                         <h2>NusaPulse: Regional Map</h2>
-                        <p class="text-secondary">Hyperlocal intelligence for ${appState.currentClient.name} across Malaysia.</p>
+                        <p class="text-secondary">${subtitle}</p>
                     </div>
-                    <button id="export-mi-pdf-button" class="btn btn--secondary">Export as PDF</button>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        ${renderNusaPulseToolbarHtml()}
+                        <button id="export-mi-pdf-button" class="btn btn--secondary">Export as PDF</button>
+                    </div>
                 </div>
                 <div class="nusapulse-grid" id="mi-dashboard-export-content">
                     <div id="mi-map-card" class="card nusapulse-map-card">
@@ -283,7 +352,89 @@ document.addEventListener('DOMContentLoaded', () => {
                 'export-mi-pdf-button',
                 'NusaPulse Report'
             ));
+            attachNusaPulseToolbarListeners();
             initializeMapAndCharts(data, 'map');
+        }
+
+        /**
+         * Fetches AI-generated, indicative regional public sentiment data for a political coalition.
+         * Reuses the same shape as fetchMarketIntelligenceData so it can drive the same map/charts.
+         */
+        async function fetchPartyRegionalData(partyCode: string) {
+            const partyName = COALITION_NAMES[partyCode] || partyCode;
+            const prompt = `
+                You are a Malaysian political intelligence analyst. Generate an indicative, AI-estimated regional public
+                sentiment report for the political coalition "${partyName}" across Malaysia.
+                The report must be a valid JSON object with the following keys: 'regionalSentiment', 'sentimentOverTime', 'keyTopics'.
+
+                1.  'regionalSentiment': An array of objects, one for each major Malaysian state (e.g., Selangor, Kuala Lumpur, Johor, Penang, Sarawak, Sabah, etc.). Each object must have:
+                    - 'region': The name of the state (string).
+                    - 'lat', 'lng': Geographic coordinates (number).
+                    - 'positive', 'neutral', 'negative': Sentiment percentages toward this coalition in that state (integer, summing to 100).
+                    - 'buzz': A score from 1 to 100 representing conversation volume about this coalition (integer).
+                2.  'sentimentOverTime': An object with 'categories' (an array of the last 6 months, e.g., ["Jan", "Feb", ...]) and 'series' (an array of 3 objects for 'Positive', 'Neutral', 'Negative', each with a 'name' and 'data' array of 6 integer percentages).
+                3.  'keyTopics': An object with 'labels' (an array of 5 trending topic strings associated with this coalition) and 'series' (an array of 5 corresponding integer values representing their prevalence).
+            `;
+            const responseSchema = {
+                type: Type.OBJECT,
+                properties: {
+                    regionalSentiment: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                region: { type: Type.STRING },
+                                lat: { type: Type.NUMBER },
+                                lng: { type: Type.NUMBER },
+                                positive: { type: Type.INTEGER },
+                                neutral: { type: Type.INTEGER },
+                                negative: { type: Type.INTEGER },
+                                buzz: { type: Type.INTEGER },
+                            }
+                        }
+                    },
+                    sentimentOverTime: {
+                        type: Type.OBJECT,
+                        properties: {
+                            categories: { type: Type.ARRAY, items: { type: Type.STRING } },
+                            series: {
+                                type: Type.ARRAY,
+                                items: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        name: { type: Type.STRING },
+                                        data: { type: Type.ARRAY, items: { type: Type.INTEGER } }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    keyTopics: {
+                        type: Type.OBJECT,
+                        properties: {
+                            labels: { type: Type.ARRAY, items: { type: Type.STRING } },
+                            series: { type: Type.ARRAY, items: { type: Type.INTEGER } }
+                        }
+                    },
+                }
+            };
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: {
+                    responseMimeType: 'application/json',
+                    responseSchema: responseSchema,
+                }
+            });
+
+            let jsonText = response.text.trim();
+            if (jsonText.startsWith('```json')) {
+                jsonText = jsonText.substring(7, jsonText.length - 3).trim();
+            } else if (jsonText.startsWith('```')) {
+                jsonText = jsonText.substring(3, jsonText.length - 3).trim();
+            }
+            return JSON.parse(jsonText);
         }
 
         async function fetchMarketIntelligenceData(client: Client) {
@@ -933,6 +1084,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         <h2>Signal: Real-Time Feed</h2>
                         <p class="text-secondary">Live mentions from across the Malaysian digital landscape.</p>
                     </div>
+                    <div class="form-group" style="min-width: 240px;">
+                        <select id="signal-focus-select" class="form-select">
+                            <option value="all">All Topics</option>
+                            <option value="BN">Barisan Nasional (BN)</option>
+                            <option value="PH">Pakatan Harapan (PH)</option>
+                            <option value="PN">Perikatan Nasional (PN)</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="signal-feed-grid">
                     <div class="signal-feed-column" id="signal-col-news">
@@ -946,6 +1105,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
             `;
+
+            const focusSelect = document.getElementById('signal-focus-select') as HTMLSelectElement;
+            if (focusSelect) {
+                focusSelect.value = appState.signalFeedFocus;
+                focusSelect.addEventListener('change', () => {
+                    appState.signalFeedFocus = focusSelect.value;
+                    // Clear existing mentions so the feed reflects the new focus.
+                    ['signal-col-news', 'signal-col-social', 'signal-col-forums'].forEach(colId => {
+                        const col = document.getElementById(colId);
+                        col?.querySelectorAll('.signal-mention-card').forEach(card => card.remove());
+                    });
+                    addNewSignalMention();
+                });
+            }
 
             // Use live AI-generated data for the feed
             if (appState.signalFeedIntervalId) {
@@ -963,10 +1136,14 @@ document.addEventListener('DOMContentLoaded', () => {
          */
         async function addNewSignalMention() {
             try {
+                const focus = appState.signalFeedFocus;
+                const focusInstruction = focus && focus !== 'all'
+                    ? `The mention must relate specifically to the Malaysian political coalition ${COALITION_NAMES[focus] || focus} — public commentary, reactions, or news coverage about it, from a realistic mix of supportive, critical, and neutral voices.`
+                    : `The mention should relate to a plausible Malaysian company or topic.`;
                 const prompt = `
                     You are a real-time media monitoring AI for Malaysia. Generate a single, plausible, and recent-looking media mention.
                     The mention should be from one of three categories: 'news', 'social', or 'forum'.
-                    The mention should relate to a plausible Malaysian company or topic. Keep the content brief.
+                    ${focusInstruction} Keep the content brief.
                     Return a single valid JSON object with the following keys:
                     - "type": "news", "social", or "forum".
                     - "source": A plausible source name (e.g., "The Star Online", "Twitter", "Lowyat.NET").
@@ -2826,6 +3003,601 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
+        /** Renders Due Diligence: Entity Vetting View */
+        function renderDueDiligenceView() {
+            const container = document.getElementById('duediligence-vetting-view');
+            if (!container) return;
+            container.innerHTML = `
+                <div class="view-header">
+                    <div>
+                        <h2>Due Diligence: Entity Vetting</h2>
+                        <p class="text-secondary">Assess political, cultural (3R), and reputational risk before engaging a partner, politician, or entity in Malaysia.</p>
+                    </div>
+                    <button id="export-dd-pdf-button" class="btn btn--secondary" style="display: none;">Export as PDF</button>
+                </div>
+                <div class="veritas-grid">
+                    <div class="input-panel">
+                        <div class="card">
+                            <div class="card__header">
+                                <h3>Entity Details</h3>
+                                <p class="text-secondary">Provide the entity to vet and any known context.</p>
+                            </div>
+                            <div class="card__body">
+                                <div class="form-group">
+                                    <label for="dd-entity-name-input">Entity Name</label>
+                                    <input type="text" id="dd-entity-name-input" class="form-input" placeholder="e.g., a politician, company, or organization">
+                                </div>
+                                <div class="form-group">
+                                    <label for="dd-entity-type-select">Entity Type</label>
+                                    <select id="dd-entity-type-select" class="form-select">
+                                        <option value="Politician">Politician</option>
+                                        <option value="Political Party">Political Party</option>
+                                        <option value="Company">Company / Corporation</option>
+                                        <option value="NGO">NGO / Civil Society Group</option>
+                                        <option value="Government Agency">Government Agency</option>
+                                        <option value="Individual">Individual (Non-political)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="dd-context-input">Additional Context (optional)</label>
+                                    <textarea id="dd-context-input" class="form-textarea" placeholder="e.g., proposed sponsorship deal, joint statement, board appointment..."></textarea>
+                                </div>
+                                <button id="run-due-diligence-button" class="btn btn--primary">Run Due Diligence</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="output-panel">
+                        <div id="due-diligence-results-container">
+                            <div class="empty-state">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                <h4>Ready to Vet</h4>
+                                <p>Enter an entity to generate a political, cultural, and reputational due diligence report.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('run-due-diligence-button')?.addEventListener('click', handleRunDueDiligence);
+            document.getElementById('export-dd-pdf-button')?.addEventListener('click', () => handleGenericPdfExport(
+                'due-diligence-results-container',
+                'export-dd-pdf-button',
+                'Due Diligence Report'
+            ));
+        }
+
+        /**
+         * Handles the entity due diligence process.
+         */
+        async function handleRunDueDiligence() {
+            const nameInput = document.getElementById('dd-entity-name-input') as HTMLInputElement;
+            const typeSelect = document.getElementById('dd-entity-type-select') as HTMLSelectElement;
+            const contextInput = document.getElementById('dd-context-input') as HTMLTextAreaElement;
+            const button = document.getElementById('run-due-diligence-button') as HTMLButtonElement;
+            const resultsContainer = document.getElementById('due-diligence-results-container');
+            const exportButton = document.getElementById('export-dd-pdf-button');
+
+            if (!nameInput || !typeSelect || !button || !resultsContainer) return;
+            const entityName = nameInput.value.trim();
+            if (!entityName) return;
+            const entityType = typeSelect.value;
+            const context = contextInput?.value.trim() || 'None provided';
+
+            const originalButtonText = button.innerText;
+            button.disabled = true;
+            button.innerHTML = '<div class="spinner"></div> Vetting...';
+            resultsContainer.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>AI is running political, cultural, and reputational due diligence...</p></div>`;
+            if (exportButton) exportButton.style.display = 'none';
+
+            try {
+                const clientName = appState.currentClient?.name || 'our client';
+                const prompt = `
+                    As a Malaysian political and PR due diligence analyst, assess the following entity on behalf of ${clientName}, who is considering an engagement with it.
+
+                    Entity Name: "${entityName}"
+                    Entity Type: ${entityType}
+                    Additional Context: ${context}
+
+                    Provide a comprehensive due diligence assessment considering:
+                    1. Political exposure and coalition dynamics (Pakatan Harapan / Barisan Nasional / Perikatan Nasional / other), and known relationships or affiliations.
+                    2. 3R sensitivities (Race, Religion, Royalty), plus federal-state and Sabah/Sarawak autonomy considerations where relevant.
+                    3. Reputational and integrity red flags (past controversies, conflicts of interest, regulatory issues).
+                    4. Likely reactions from key stakeholder groups (e.g., government, opposition, media, civil society, business community).
+                    5. A clear overall recommendation on whether to proceed with the engagement.
+
+                    Return a single valid JSON object with this exact structure:
+                    {
+                        "overallRiskScore": integer 0-100,
+                        "riskLevel": "Low" | "Medium" | "High" | "Critical",
+                        "recommendation": short actionable recommendation (e.g., "Proceed", "Proceed with Caution", "Enhanced Due Diligence Required", "Decline Engagement"),
+                        "executiveSummary": a paragraph summarizing the overall assessment,
+                        "politicalExposure": {
+                            "coalitionAffiliations": array of objects with "coalition" ("PH", "BN", "PN", or "None/Other") and "strength" ("Strong", "Moderate", "Weak"),
+                            "influenceScore": integer 0-100,
+                            "keyRelationships": array of objects with "name" and "relationship" (brief description)
+                        },
+                        "sensitivityChecks": array of objects, each with "area" (e.g. "Race", "Religion", "Royalty", "Sabah/Sarawak Autonomy", "Federal-State Relations"), "severity" ("Low", "Medium", or "High"), and "details",
+                        "integrityFlags": array of objects, each with "flag" (short title), "severity" ("Low", "Medium", or "High"), and "details". Use an empty array if none found,
+                        "stakeholderReactions": array of objects with "stakeholder" and "reaction" (their likely stance/reaction),
+                        "mitigationStrategies": array of short actionable strings,
+                        "confidenceLevel": integer 0-100
+                    }
+                `;
+
+                const responseSchema = {
+                    type: Type.OBJECT,
+                    properties: {
+                        overallRiskScore: { type: Type.INTEGER },
+                        riskLevel: { type: Type.STRING },
+                        recommendation: { type: Type.STRING },
+                        executiveSummary: { type: Type.STRING },
+                        politicalExposure: {
+                            type: Type.OBJECT,
+                            properties: {
+                                coalitionAffiliations: {
+                                    type: Type.ARRAY,
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            coalition: { type: Type.STRING },
+                                            strength: { type: Type.STRING },
+                                        }
+                                    }
+                                },
+                                influenceScore: { type: Type.INTEGER },
+                                keyRelationships: {
+                                    type: Type.ARRAY,
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            name: { type: Type.STRING },
+                                            relationship: { type: Type.STRING },
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        sensitivityChecks: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    area: { type: Type.STRING },
+                                    severity: { type: Type.STRING },
+                                    details: { type: Type.STRING },
+                                }
+                            }
+                        },
+                        integrityFlags: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    flag: { type: Type.STRING },
+                                    severity: { type: Type.STRING },
+                                    details: { type: Type.STRING },
+                                }
+                            }
+                        },
+                        stakeholderReactions: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    stakeholder: { type: Type.STRING },
+                                    reaction: { type: Type.STRING },
+                                }
+                            }
+                        },
+                        mitigationStrategies: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        confidenceLevel: { type: Type.INTEGER },
+                    }
+                };
+
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: prompt,
+                    config: {
+                        responseMimeType: 'application/json',
+                        responseSchema: responseSchema,
+                    }
+                });
+
+                const result = JSON.parse(response.text);
+                renderDueDiligenceResults(entityName, entityType, result);
+                if (exportButton) exportButton.style.display = 'inline-flex';
+
+            } catch (error) {
+                console.error("Due diligence check failed", error);
+                resultsContainer.innerHTML = `<div class="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    <h3>Due Diligence Failed</h3>
+                    <p class="error-message">Could not process the request. Please try again later.</p>
+                </div>`;
+            } finally {
+                button.disabled = false;
+                button.innerText = originalButtonText;
+            }
+        }
+
+        /**
+         * Renders the results of the entity due diligence check.
+         */
+        function renderDueDiligenceResults(entityName: string, entityType: string, data: any) {
+            const container = document.getElementById('due-diligence-results-container');
+            if (!container) return;
+
+            const circumference = 2 * Math.PI * 45;
+            const offset = circumference - (data.overallRiskScore / 100) * circumference;
+            const scoreColor = data.overallRiskScore > 70 ? 'var(--danger)' : data.overallRiskScore > 40 ? 'var(--warning)' : 'var(--info)';
+
+            const riskLevelClass = (data.riskLevel || '').toLowerCase();
+            const bannerClass = riskLevelClass === 'low' ? 'proceed' : riskLevelClass === 'medium' ? 'caution' : 'enhanced';
+
+            const coalitionHtml = (data.politicalExposure?.coalitionAffiliations || []).map((c: any) => `
+                <span class="coalition-badge">${c.coalition} <span class="coalition-badge__strength">${c.strength}</span></span>
+            `).join('') || '<p class="text-secondary">No coalition affiliations identified.</p>';
+
+            const relationshipsHtml = (data.politicalExposure?.keyRelationships || []).map((r: any) => `
+                <div class="dd-relationship-item"><span>${r.name}</span><span class="text-secondary">${r.relationship}</span></div>
+            `).join('') || '<p class="text-secondary">No key relationships identified.</p>';
+
+            const sensitivityHtml = (data.sensitivityChecks || []).map((check: any) => `
+                <div class="compliance-card compliance-card--${(check.severity || 'low').toLowerCase()}">
+                    <div class="compliance-card__header">
+                        <span class="compliance-card__title">${check.area}</span>
+                        <span class="compliance-card__severity">${check.severity}</span>
+                    </div>
+                    <p>${check.details}</p>
+                </div>
+            `).join('');
+
+            const integrityHtml = (data.integrityFlags || []).length ? (data.integrityFlags || []).map((flag: any) => `
+                <div class="compliance-card compliance-card--${(flag.severity || 'low').toLowerCase()}">
+                    <div class="compliance-card__header">
+                        <span class="compliance-card__title">${flag.flag}</span>
+                        <span class="compliance-card__severity">${flag.severity}</span>
+                    </div>
+                    <p>${flag.details}</p>
+                </div>
+            `).join('') : '<p class="text-secondary">No significant integrity flags identified.</p>';
+
+            const stakeholderHtml = (data.stakeholderReactions || []).map((s: any) => `
+                <div class="dd-stakeholder-item"><span>${s.stakeholder}</span><span class="text-secondary">${s.reaction}</span></div>
+            `).join('');
+
+            const mitigationHtml = (data.mitigationStrategies || []).map((s: string) => `<li>${s}</li>`).join('');
+
+            container.innerHTML = `
+                <div class="ai-report-header">
+                    <h3>Due Diligence Report: ${entityName}</h3>
+                    <p class="text-secondary">${entityType} &middot; Confidence: ${data.confidenceLevel}%</p>
+                    <p class="text-secondary">${data.executiveSummary}</p>
+                </div>
+                <div class="dd-recommendation-banner dd-recommendation-banner--${bannerClass}">${data.recommendation}</div>
+                <div class="veritas-results-grid">
+                    <div class="card">
+                        <div class="card__header"><h4>Overall Risk Score</h4></div>
+                        <div class="card__body">
+                            <div class="score-dial-container">
+                                <svg viewBox="0 0 100 100">
+                                    <circle class="score-dial-track" cx="50" cy="50" r="45"></circle>
+                                    <circle class="score-dial-value" cx="50" cy="50" r="45"
+                                        stroke="${scoreColor}"
+                                        stroke-dasharray="${circumference}"
+                                        stroke-dashoffset="${offset}"
+                                    ></circle>
+                                </svg>
+                                <div class="score-text" style="color: ${scoreColor};">${data.overallRiskScore}</div>
+                            </div>
+                            <p class="score-justification">Risk Level: ${data.riskLevel}</p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h4>Political Exposure</h4></div>
+                        <div class="card__body">
+                            <div class="propagation-metric"><span class="propagation-metric__label">Influence Score</span><span class="propagation-metric__value">${data.politicalExposure?.influenceScore ?? 'N/A'}</span></div>
+                            <div style="margin: 0.75rem 0;">${coalitionHtml}</div>
+                            <h5 class="text-secondary" style="margin-bottom: 0.5rem;">Key Relationships</h5>
+                            <div class="dd-relationship-list">${relationshipsHtml}</div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h4>3R & Cultural Sensitivity Checks</h4></div>
+                        <div class="card__body">${sensitivityHtml}</div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h4>Integrity & Reputational Flags</h4></div>
+                        <div class="card__body">${integrityHtml}</div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h4>Stakeholder Reactions</h4></div>
+                        <div class="card__body"><div class="dd-stakeholder-list">${stakeholderHtml}</div></div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h4>Recommended Mitigation Strategies</h4></div>
+                        <div class="card__body"><ul class="dd-mitigation-list">${mitigationHtml}</ul></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        /** Renders NusaPulse: Party Sentiment Tracker View */
+        async function renderNusaPulsePartyTrackerView() {
+            const container = document.getElementById('nusapulse-party-tracker-view');
+            if (!container) return;
+
+            const cacheKey = 'partySentimentTracker';
+            if (appState.cache[cacheKey]) {
+                renderPartyTrackerContent(appState.cache[cacheKey]);
+                return;
+            }
+            await loadPartyTrackerData();
+        }
+
+        async function loadPartyTrackerData() {
+            const container = document.getElementById('nusapulse-party-tracker-view');
+            if (!container) return;
+            const cacheKey = 'partySentimentTracker';
+            container.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Analyzing national sentiment across Malaysia's political coalitions...</p></div>`;
+            try {
+                const data = await fetchPartySentimentTrackerData();
+                appState.cache[cacheKey] = data;
+                renderPartyTrackerContent(data);
+            } catch (error) {
+                console.error("Failed to fetch party sentiment tracker data", error);
+                container.innerHTML = `<div class="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    <h3>Analysis Failed</h3>
+                    <p class="error-message">Could not generate the party sentiment report. The backend service may be unavailable.</p>
+                </div>`;
+            }
+        }
+
+        /**
+         * Fetches an AI-generated, indicative national sentiment comparison across Malaysia's
+         * major political coalitions (BN, PH, PN) for strategy purposes. This is AI-estimated
+         * analysis, not a substitute for verified polling data.
+         */
+        async function fetchPartySentimentTrackerData() {
+            const prompt = `
+                You are a neutral Malaysian political analyst producing an indicative national sentiment briefing
+                for internal strategy use. Cover the three major coalitions: Barisan Nasional (BN), Pakatan Harapan (PH),
+                and Perikatan Nasional (PN).
+
+                Return a single valid JSON object with this exact structure:
+                {
+                    "asOfPeriod": a short label for the current period (e.g. "Q3 2026"),
+                    "nationalMood": {
+                        "rightDirectionPct": integer 0-100,
+                        "wrongDirectionPct": integer 0-100 (should roughly complement rightDirectionPct),
+                        "topIssues": array of 5 objects with "issue" (short string, e.g. "Cost of Living") and "pct" (integer 0-100, share of respondents citing it as a top concern)
+                    },
+                    "coalitions": array of exactly 3 objects, one each for "BN", "PH", "PN", each with:
+                        - "coalition": the short code ("BN", "PH", or "PN"),
+                        - "fullName": full coalition name,
+                        - "overallApproval": integer 0-100,
+                        - "sentiment": object with "positive", "neutral", "negative" integers summing to 100,
+                        - "trend": "Rising", "Stable", or "Declining",
+                        - "topLeaders": array of 2-3 objects with "name" and "approvalPct" (integer 0-100),
+                        - "strengths": array of 2-3 short strings describing current strategic strengths,
+                        - "vulnerabilities": array of 2-3 short strings describing current strategic vulnerabilities,
+                        - "trendingNarratives": array of 2-3 short strings describing what is currently being said about this coalition in public discourse
+                }
+
+                Keep the analysis balanced and analytical (not promotional toward any single coalition), grounded in plausible,
+                current Malaysian political dynamics (economy/cost of living, coalition stability, leadership approval, state-level contests).
+            `;
+            const responseSchema = {
+                type: Type.OBJECT,
+                properties: {
+                    asOfPeriod: { type: Type.STRING },
+                    nationalMood: {
+                        type: Type.OBJECT,
+                        properties: {
+                            rightDirectionPct: { type: Type.INTEGER },
+                            wrongDirectionPct: { type: Type.INTEGER },
+                            topIssues: {
+                                type: Type.ARRAY,
+                                items: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        issue: { type: Type.STRING },
+                                        pct: { type: Type.INTEGER },
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    coalitions: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                coalition: { type: Type.STRING },
+                                fullName: { type: Type.STRING },
+                                overallApproval: { type: Type.INTEGER },
+                                sentiment: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        positive: { type: Type.INTEGER },
+                                        neutral: { type: Type.INTEGER },
+                                        negative: { type: Type.INTEGER },
+                                    }
+                                },
+                                trend: { type: Type.STRING },
+                                topLeaders: {
+                                    type: Type.ARRAY,
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            name: { type: Type.STRING },
+                                            approvalPct: { type: Type.INTEGER },
+                                        }
+                                    }
+                                },
+                                strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                vulnerabilities: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                trendingNarratives: { type: Type.ARRAY, items: { type: Type.STRING } },
+                            }
+                        }
+                    }
+                }
+            };
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: {
+                    responseMimeType: 'application/json',
+                    responseSchema: responseSchema,
+                }
+            });
+
+            let jsonText = response.text.trim();
+            if (jsonText.startsWith('```json')) {
+                jsonText = jsonText.substring(7, jsonText.length - 3).trim();
+            } else if (jsonText.startsWith('```')) {
+                jsonText = jsonText.substring(3, jsonText.length - 3).trim();
+            }
+            return JSON.parse(jsonText);
+        }
+
+        function renderPartyTrackerContent(data: any) {
+            const container = document.getElementById('nusapulse-party-tracker-view');
+            if (!container) return;
+
+            const trendClass = (trend: string) => (trend || '').toLowerCase();
+
+            const issuesListHtml = (data.nationalMood?.topIssues || []).map((i: any) =>
+                `<li>${i.issue} <span class="text-secondary">(${i.pct}%)</span></li>`
+            ).join('');
+
+            const coalitionCardsHtml = (data.coalitions || []).map((c: any) => {
+                const leadersHtml = (c.topLeaders || []).map((l: any) => `
+                    <div class="coalition-leader-item"><span>${l.name}</span><span class="coalition-leader-item__approval">${l.approvalPct}%</span></div>
+                `).join('');
+                const strengthsHtml = (c.strengths || []).map((s: string) => `<li>${s}</li>`).join('');
+                const vulnerabilitiesHtml = (c.vulnerabilities || []).map((v: string) => `<li>${v}</li>`).join('');
+                const narrativesHtml = (c.trendingNarratives || []).map((n: string) => `<li>${n}</li>`).join('');
+                return `
+                    <div class="card">
+                        <div class="card__header coalition-detail-card__header">
+                            <h3>${c.fullName || c.coalition}</h3>
+                            <span class="trend-badge trend-badge--${trendClass(c.trend)}">${c.trend}</span>
+                        </div>
+                        <div class="card__body">
+                            <div class="propagation-metric"><span class="propagation-metric__label">Overall Approval</span><span class="propagation-metric__value">${c.overallApproval}%</span></div>
+                            <h5 class="text-secondary" style="margin: 1rem 0 0.5rem;">Top Leaders</h5>
+                            <div class="coalition-leader-list">${leadersHtml}</div>
+                            <div class="ai-report-section"><h4>Strengths</h4><ul>${strengthsHtml}</ul></div>
+                            <div class="ai-report-section"><h4>Vulnerabilities</h4><ul>${vulnerabilitiesHtml}</ul></div>
+                            <div class="ai-report-section"><h4>Trending Narratives</h4><ul>${narrativesHtml}</ul></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="view-header">
+                    <div>
+                        <h2>NusaPulse: Party Sentiment Tracker</h2>
+                        <p class="text-secondary">AI-estimated national sentiment across Malaysia's coalitions &middot; ${data.asOfPeriod}</p>
+                    </div>
+                    <div style="display: flex; gap: 0.75rem;">
+                        <button id="refresh-party-tracker-button" class="btn btn--secondary">Refresh</button>
+                        <button id="export-party-tracker-pdf-button" class="btn btn--secondary">Export as PDF</button>
+                    </div>
+                </div>
+                <div class="insights-grid" id="party-tracker-export-content">
+                    <div class="card">
+                        <div class="card__header"><h3>National Mood</h3></div>
+                        <div id="party-mood-chart" class="card__body"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h3>Top National Issues</h3></div>
+                        <div class="card__body"><ul class="ai-report-section" style="padding-left: 1.2rem;">${issuesListHtml}</ul></div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h3>Coalition Approval</h3></div>
+                        <div id="party-approval-chart" class="card__body"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h3>Coalition Sentiment Comparison</h3></div>
+                        <div id="party-sentiment-comp-chart" class="card__body"></div>
+                    </div>
+                    <div style="grid-column: 1 / -1;" class="coalition-detail-grid">
+                        ${coalitionCardsHtml}
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('refresh-party-tracker-button')?.addEventListener('click', () => {
+                delete appState.cache['partySentimentTracker'];
+                loadPartyTrackerData();
+            });
+            document.getElementById('export-party-tracker-pdf-button')?.addEventListener('click', () => handleGenericPdfExport(
+                'party-tracker-export-content',
+                'export-party-tracker-pdf-button',
+                'Party Sentiment Tracker Report'
+            ));
+
+            initializePartyTrackerCharts(data);
+        }
+
+        function initializePartyTrackerCharts(data: any) {
+            const theme = document.body.classList.contains('dark') ? 'dark' : 'light';
+            const coalitions = data.coalitions || [];
+
+            if (appState.charts['partyMood']) appState.charts['partyMood'].destroy();
+            const moodOptions = {
+                series: [data.nationalMood?.rightDirectionPct ?? 0, data.nationalMood?.wrongDirectionPct ?? 0],
+                chart: { type: 'donut', height: 350 },
+                labels: ['Right Direction', 'Wrong Direction'],
+                colors: ['var(--success)', 'var(--danger)'],
+                legend: { position: 'bottom', labels: { colors: 'var(--text-secondary)' } },
+                tooltip: { theme: theme, fillSeriesColor: false }
+            };
+            appState.charts['partyMood'] = new ApexCharts(document.querySelector('#party-mood-chart'), moodOptions);
+            appState.charts['partyMood'].render();
+
+            if (appState.charts['partyApproval']) appState.charts['partyApproval'].destroy();
+            const approvalOptions = {
+                series: [{ name: 'Approval', data: coalitions.map((c: any) => c.overallApproval) }],
+                chart: { type: 'bar', height: 350, toolbar: { show: false } },
+                plotOptions: { bar: { borderRadius: 4, columnWidth: '50%' } },
+                dataLabels: { enabled: false },
+                xaxis: { categories: coalitions.map((c: any) => c.coalition), labels: { style: { colors: 'var(--text-secondary)' } } },
+                yaxis: { labels: { formatter: (val: number) => `${val}%`, style: { colors: 'var(--text-secondary)' } } },
+                colors: ['var(--primary)'],
+                grid: { borderColor: 'var(--border-color)' },
+                tooltip: { theme: theme }
+            };
+            appState.charts['partyApproval'] = new ApexCharts(document.querySelector('#party-approval-chart'), approvalOptions);
+            appState.charts['partyApproval'].render();
+
+            if (appState.charts['partySentimentComp']) appState.charts['partySentimentComp'].destroy();
+            const sentimentCompOptions = {
+                series: [
+                    { name: 'Positive', data: coalitions.map((c: any) => c.sentiment?.positive ?? 0) },
+                    { name: 'Neutral', data: coalitions.map((c: any) => c.sentiment?.neutral ?? 0) },
+                    { name: 'Negative', data: coalitions.map((c: any) => c.sentiment?.negative ?? 0) },
+                ],
+                chart: { type: 'bar', height: 350, stacked: true, toolbar: { show: false } },
+                plotOptions: { bar: { horizontal: false, columnWidth: '55%' } },
+                dataLabels: { enabled: false },
+                xaxis: { categories: coalitions.map((c: any) => c.coalition), labels: { style: { colors: 'var(--text-secondary)' } } },
+                yaxis: { labels: { formatter: (val: number) => `${val}%`, style: { colors: 'var(--text-secondary)' } } },
+                fill: { opacity: 1 },
+                colors: ['var(--success)', 'var(--warning)', 'var(--danger)'],
+                legend: { position: 'top', horizontalAlign: 'right', labels: { colors: 'var(--text-secondary)' } },
+                grid: { borderColor: 'var(--border-color)' },
+                tooltip: { theme: theme }
+            };
+            appState.charts['partySentimentComp'] = new ApexCharts(document.querySelector('#party-sentiment-comp-chart'), sentimentCompOptions);
+            appState.charts['partySentimentComp'].render();
+        }
+
         // --- UI Rendering & App Initialization ---
         const viewRenderers: { [key: string]: () => void } = {
             'nusapulse-map-view': renderNusaPulseMapView,
@@ -2845,6 +3617,8 @@ document.addEventListener('DOMContentLoaded', () => {
             'nexus-stakeholder-view': renderNexusStakeholderView,
             'aegis-scenario-view': renderAegisScenarioView,
             'amplify-campaign-view': renderAmplifyCampaignView,
+            'duediligence-vetting-view': renderDueDiligenceView,
+            'nusapulse-party-tracker-view': renderNusaPulsePartyTrackerView,
         };
 
         function getActiveView(): string {
@@ -3030,6 +3804,7 @@ document.addEventListener('DOMContentLoaded', () => {
                              <ul class="sub-nav-list open">
                                 <li><a class="sub-nav-item active" data-view="nusapulse-map-view">Regional Map</a></li>
                                 <li><a class="sub-nav-item" data-view="nusapulse-insights-view">Industry Insights</a></li>
+                                <li><a class="sub-nav-item" data-view="nusapulse-party-tracker-view">Party Sentiment Tracker</a></li>
                             </ul>
                         </div>
                          <div class="nav-pillar">
@@ -3071,6 +3846,18 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <li><a class="sub-nav-item" data-view="amplify-campaign-view">Campaign Builder</a></li>
                             </ul>
                         </div>
+                        <div class="nav-pillar">
+                            <div class="nav-item" data-parent="duediligence">
+                                <div class="nav-item__content">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                    <span class="nav-item__text">Due Diligence</span>
+                                </div>
+                                <svg class="nav-item__arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </div>
+                             <ul class="sub-nav-list">
+                                <li><a class="sub-nav-item" data-view="duediligence-vetting-view">Entity Vetting</a></li>
+                            </ul>
+                        </div>
                     </nav>
                 </aside>
                 <div class="main-wrapper">
@@ -3108,6 +3895,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div id="nexus-stakeholder-view" class="view view-hidden"></div>
                         <div id="aegis-scenario-view" class="view view-hidden"></div>
                         <div id="amplify-campaign-view" class="view view-hidden"></div>
+                        <div id="duediligence-vetting-view" class="view view-hidden"></div>
+                        <div id="nusapulse-party-tracker-view" class="view view-hidden"></div>
                     </main>
                 </div>
             `;
