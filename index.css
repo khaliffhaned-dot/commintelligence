@@ -728,6 +728,16 @@ body.dark .sub-nav-item.active { background-color: rgba(229, 62, 62, 0.15); }
 .compliance-card--medium .compliance-card__severity { background-color: var(--warning); }
 .compliance-card--low .compliance-card__severity { background-color: var(--info); }
 .compliance-card p { font-size: 0.85rem; line-height: 1.5; }
+/* --- Due Diligence (Entity Vetting) View --- */
+.dd-recommendation-banner { padding: 1rem 1.25rem; border-radius: var(--radius-sm); border-left: 4px solid; font-weight: 600; margin-bottom: 1.5rem; }
+.dd-recommendation-banner--proceed { border-color: var(--success); background-color: var(--success-bg); color: var(--success); }
+.dd-recommendation-banner--caution { border-color: var(--warning); background-color: var(--warning-bg); color: var(--warning); }
+.dd-recommendation-banner--enhanced { border-color: var(--danger); background-color: var(--danger-bg); color: var(--danger); }
+.coalition-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; background-color: var(--surface-light); border: 1px solid var(--border-color); margin: 0 6px 6px 0; }
+.coalition-badge__strength { font-weight: 400; color: var(--text-secondary); }
+.dd-relationship-list, .dd-stakeholder-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.dd-relationship-item, .dd-stakeholder-item { display: flex; justify-content: space-between; gap: 1rem; padding: 0.6rem 0.8rem; border-radius: var(--radius-sm); background-color: var(--surface-light); font-size: 0.85rem; }
+.dd-mitigation-list { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.5rem; }
 .propagation-metric { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color); }
 .propagation-metric:last-child { border-bottom: none; }
 .propagation-metric__label { font-weight: 500; }

@@ -2826,6 +2826,325 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
+        /** Renders Due Diligence: Entity Vetting View */
+        function renderDueDiligenceView() {
+            const container = document.getElementById('duediligence-vetting-view');
+            if (!container) return;
+            container.innerHTML = `
+                <div class="view-header">
+                    <div>
+                        <h2>Due Diligence: Entity Vetting</h2>
+                        <p class="text-secondary">Assess political, cultural (3R), and reputational risk before engaging a partner, politician, or entity in Malaysia.</p>
+                    </div>
+                    <button id="export-dd-pdf-button" class="btn btn--secondary" style="display: none;">Export as PDF</button>
+                </div>
+                <div class="veritas-grid">
+                    <div class="input-panel">
+                        <div class="card">
+                            <div class="card__header">
+                                <h3>Entity Details</h3>
+                                <p class="text-secondary">Provide the entity to vet and any known context.</p>
+                            </div>
+                            <div class="card__body">
+                                <div class="form-group">
+                                    <label for="dd-entity-name-input">Entity Name</label>
+                                    <input type="text" id="dd-entity-name-input" class="form-input" placeholder="e.g., a politician, company, or organization">
+                                </div>
+                                <div class="form-group">
+                                    <label for="dd-entity-type-select">Entity Type</label>
+                                    <select id="dd-entity-type-select" class="form-select">
+                                        <option value="Politician">Politician</option>
+                                        <option value="Political Party">Political Party</option>
+                                        <option value="Company">Company / Corporation</option>
+                                        <option value="NGO">NGO / Civil Society Group</option>
+                                        <option value="Government Agency">Government Agency</option>
+                                        <option value="Individual">Individual (Non-political)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="dd-context-input">Additional Context (optional)</label>
+                                    <textarea id="dd-context-input" class="form-textarea" placeholder="e.g., proposed sponsorship deal, joint statement, board appointment..."></textarea>
+                                </div>
+                                <button id="run-due-diligence-button" class="btn btn--primary">Run Due Diligence</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="output-panel">
+                        <div id="due-diligence-results-container">
+                            <div class="empty-state">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                <h4>Ready to Vet</h4>
+                                <p>Enter an entity to generate a political, cultural, and reputational due diligence report.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('run-due-diligence-button')?.addEventListener('click', handleRunDueDiligence);
+            document.getElementById('export-dd-pdf-button')?.addEventListener('click', () => handleGenericPdfExport(
+                'due-diligence-results-container',
+                'export-dd-pdf-button',
+                'Due Diligence Report'
+            ));
+        }
+
+        /**
+         * Handles the entity due diligence process.
+         */
+        async function handleRunDueDiligence() {
+            const nameInput = document.getElementById('dd-entity-name-input') as HTMLInputElement;
+            const typeSelect = document.getElementById('dd-entity-type-select') as HTMLSelectElement;
+            const contextInput = document.getElementById('dd-context-input') as HTMLTextAreaElement;
+            const button = document.getElementById('run-due-diligence-button') as HTMLButtonElement;
+            const resultsContainer = document.getElementById('due-diligence-results-container');
+            const exportButton = document.getElementById('export-dd-pdf-button');
+
+            if (!nameInput || !typeSelect || !button || !resultsContainer) return;
+            const entityName = nameInput.value.trim();
+            if (!entityName) return;
+            const entityType = typeSelect.value;
+            const context = contextInput?.value.trim() || 'None provided';
+
+            const originalButtonText = button.innerText;
+            button.disabled = true;
+            button.innerHTML = '<div class="spinner"></div> Vetting...';
+            resultsContainer.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>AI is running political, cultural, and reputational due diligence...</p></div>`;
+            if (exportButton) exportButton.style.display = 'none';
+
+            try {
+                const clientName = appState.currentClient?.name || 'our client';
+                const prompt = `
+                    As a Malaysian political and PR due diligence analyst, assess the following entity on behalf of ${clientName}, who is considering an engagement with it.
+
+                    Entity Name: "${entityName}"
+                    Entity Type: ${entityType}
+                    Additional Context: ${context}
+
+                    Provide a comprehensive due diligence assessment considering:
+                    1. Political exposure and coalition dynamics (Pakatan Harapan / Barisan Nasional / Perikatan Nasional / other), and known relationships or affiliations.
+                    2. 3R sensitivities (Race, Religion, Royalty), plus federal-state and Sabah/Sarawak autonomy considerations where relevant.
+                    3. Reputational and integrity red flags (past controversies, conflicts of interest, regulatory issues).
+                    4. Likely reactions from key stakeholder groups (e.g., government, opposition, media, civil society, business community).
+                    5. A clear overall recommendation on whether to proceed with the engagement.
+
+                    Return a single valid JSON object with this exact structure:
+                    {
+                        "overallRiskScore": integer 0-100,
+                        "riskLevel": "Low" | "Medium" | "High" | "Critical",
+                        "recommendation": short actionable recommendation (e.g., "Proceed", "Proceed with Caution", "Enhanced Due Diligence Required", "Decline Engagement"),
+                        "executiveSummary": a paragraph summarizing the overall assessment,
+                        "politicalExposure": {
+                            "coalitionAffiliations": array of objects with "coalition" ("PH", "BN", "PN", or "None/Other") and "strength" ("Strong", "Moderate", "Weak"),
+                            "influenceScore": integer 0-100,
+                            "keyRelationships": array of objects with "name" and "relationship" (brief description)
+                        },
+                        "sensitivityChecks": array of objects, each with "area" (e.g. "Race", "Religion", "Royalty", "Sabah/Sarawak Autonomy", "Federal-State Relations"), "severity" ("Low", "Medium", or "High"), and "details",
+                        "integrityFlags": array of objects, each with "flag" (short title), "severity" ("Low", "Medium", or "High"), and "details". Use an empty array if none found,
+                        "stakeholderReactions": array of objects with "stakeholder" and "reaction" (their likely stance/reaction),
+                        "mitigationStrategies": array of short actionable strings,
+                        "confidenceLevel": integer 0-100
+                    }
+                `;
+
+                const responseSchema = {
+                    type: Type.OBJECT,
+                    properties: {
+                        overallRiskScore: { type: Type.INTEGER },
+                        riskLevel: { type: Type.STRING },
+                        recommendation: { type: Type.STRING },
+                        executiveSummary: { type: Type.STRING },
+                        politicalExposure: {
+                            type: Type.OBJECT,
+                            properties: {
+                                coalitionAffiliations: {
+                                    type: Type.ARRAY,
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            coalition: { type: Type.STRING },
+                                            strength: { type: Type.STRING },
+                                        }
+                                    }
+                                },
+                                influenceScore: { type: Type.INTEGER },
+                                keyRelationships: {
+                                    type: Type.ARRAY,
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            name: { type: Type.STRING },
+                                            relationship: { type: Type.STRING },
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        sensitivityChecks: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    area: { type: Type.STRING },
+                                    severity: { type: Type.STRING },
+                                    details: { type: Type.STRING },
+                                }
+                            }
+                        },
+                        integrityFlags: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    flag: { type: Type.STRING },
+                                    severity: { type: Type.STRING },
+                                    details: { type: Type.STRING },
+                                }
+                            }
+                        },
+                        stakeholderReactions: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    stakeholder: { type: Type.STRING },
+                                    reaction: { type: Type.STRING },
+                                }
+                            }
+                        },
+                        mitigationStrategies: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        confidenceLevel: { type: Type.INTEGER },
+                    }
+                };
+
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: prompt,
+                    config: {
+                        responseMimeType: 'application/json',
+                        responseSchema: responseSchema,
+                    }
+                });
+
+                const result = JSON.parse(response.text);
+                renderDueDiligenceResults(entityName, entityType, result);
+                if (exportButton) exportButton.style.display = 'inline-flex';
+
+            } catch (error) {
+                console.error("Due diligence check failed", error);
+                resultsContainer.innerHTML = `<div class="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    <h3>Due Diligence Failed</h3>
+                    <p class="error-message">Could not process the request. Please try again later.</p>
+                </div>`;
+            } finally {
+                button.disabled = false;
+                button.innerText = originalButtonText;
+            }
+        }
+
+        /**
+         * Renders the results of the entity due diligence check.
+         */
+        function renderDueDiligenceResults(entityName: string, entityType: string, data: any) {
+            const container = document.getElementById('due-diligence-results-container');
+            if (!container) return;
+
+            const circumference = 2 * Math.PI * 45;
+            const offset = circumference - (data.overallRiskScore / 100) * circumference;
+            const scoreColor = data.overallRiskScore > 70 ? 'var(--danger)' : data.overallRiskScore > 40 ? 'var(--warning)' : 'var(--info)';
+
+            const riskLevelClass = (data.riskLevel || '').toLowerCase();
+            const bannerClass = riskLevelClass === 'low' ? 'proceed' : riskLevelClass === 'medium' ? 'caution' : 'enhanced';
+
+            const coalitionHtml = (data.politicalExposure?.coalitionAffiliations || []).map((c: any) => `
+                <span class="coalition-badge">${c.coalition} <span class="coalition-badge__strength">${c.strength}</span></span>
+            `).join('') || '<p class="text-secondary">No coalition affiliations identified.</p>';
+
+            const relationshipsHtml = (data.politicalExposure?.keyRelationships || []).map((r: any) => `
+                <div class="dd-relationship-item"><span>${r.name}</span><span class="text-secondary">${r.relationship}</span></div>
+            `).join('') || '<p class="text-secondary">No key relationships identified.</p>';
+
+            const sensitivityHtml = (data.sensitivityChecks || []).map((check: any) => `
+                <div class="compliance-card compliance-card--${(check.severity || 'low').toLowerCase()}">
+                    <div class="compliance-card__header">
+                        <span class="compliance-card__title">${check.area}</span>
+                        <span class="compliance-card__severity">${check.severity}</span>
+                    </div>
+                    <p>${check.details}</p>
+                </div>
+            `).join('');
+
+            const integrityHtml = (data.integrityFlags || []).length ? (data.integrityFlags || []).map((flag: any) => `
+                <div class="compliance-card compliance-card--${(flag.severity || 'low').toLowerCase()}">
+                    <div class="compliance-card__header">
+                        <span class="compliance-card__title">${flag.flag}</span>
+                        <span class="compliance-card__severity">${flag.severity}</span>
+                    </div>
+                    <p>${flag.details}</p>
+                </div>
+            `).join('') : '<p class="text-secondary">No significant integrity flags identified.</p>';
+
+            const stakeholderHtml = (data.stakeholderReactions || []).map((s: any) => `
+                <div class="dd-stakeholder-item"><span>${s.stakeholder}</span><span class="text-secondary">${s.reaction}</span></div>
+            `).join('');
+
+            const mitigationHtml = (data.mitigationStrategies || []).map((s: string) => `<li>${s}</li>`).join('');
+
+            container.innerHTML = `
+                <div class="ai-report-header">
+                    <h3>Due Diligence Report: ${entityName}</h3>
+                    <p class="text-secondary">${entityType} &middot; Confidence: ${data.confidenceLevel}%</p>
+                    <p class="text-secondary">${data.executiveSummary}</p>
+                </div>
+                <div class="dd-recommendation-banner dd-recommendation-banner--${bannerClass}">${data.recommendation}</div>
+                <div class="veritas-results-grid">
+                    <div class="card">
+                        <div class="card__header"><h4>Overall Risk Score</h4></div>
+                        <div class="card__body">
+                            <div class="score-dial-container">
+                                <svg viewBox="0 0 100 100">
+                                    <circle class="score-dial-track" cx="50" cy="50" r="45"></circle>
+                                    <circle class="score-dial-value" cx="50" cy="50" r="45"
+                                        stroke="${scoreColor}"
+                                        stroke-dasharray="${circumference}"
+                                        stroke-dashoffset="${offset}"
+                                    ></circle>
+                                </svg>
+                                <div class="score-text" style="color: ${scoreColor};">${data.overallRiskScore}</div>
+                            </div>
+                            <p class="score-justification">Risk Level: ${data.riskLevel}</p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h4>Political Exposure</h4></div>
+                        <div class="card__body">
+                            <div class="propagation-metric"><span class="propagation-metric__label">Influence Score</span><span class="propagation-metric__value">${data.politicalExposure?.influenceScore ?? 'N/A'}</span></div>
+                            <div style="margin: 0.75rem 0;">${coalitionHtml}</div>
+                            <h5 class="text-secondary" style="margin-bottom: 0.5rem;">Key Relationships</h5>
+                            <div class="dd-relationship-list">${relationshipsHtml}</div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h4>3R & Cultural Sensitivity Checks</h4></div>
+                        <div class="card__body">${sensitivityHtml}</div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h4>Integrity & Reputational Flags</h4></div>
+                        <div class="card__body">${integrityHtml}</div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h4>Stakeholder Reactions</h4></div>
+                        <div class="card__body"><div class="dd-stakeholder-list">${stakeholderHtml}</div></div>
+                    </div>
+                    <div class="card">
+                        <div class="card__header"><h4>Recommended Mitigation Strategies</h4></div>
+                        <div class="card__body"><ul class="dd-mitigation-list">${mitigationHtml}</ul></div>
+                    </div>
+                </div>
+            `;
+        }
+
         // --- UI Rendering & App Initialization ---
         const viewRenderers: { [key: string]: () => void } = {
             'nusapulse-map-view': renderNusaPulseMapView,
@@ -2845,6 +3164,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'nexus-stakeholder-view': renderNexusStakeholderView,
             'aegis-scenario-view': renderAegisScenarioView,
             'amplify-campaign-view': renderAmplifyCampaignView,
+            'duediligence-vetting-view': renderDueDiligenceView,
         };
 
         function getActiveView(): string {
@@ -3071,6 +3391,18 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <li><a class="sub-nav-item" data-view="amplify-campaign-view">Campaign Builder</a></li>
                             </ul>
                         </div>
+                        <div class="nav-pillar">
+                            <div class="nav-item" data-parent="duediligence">
+                                <div class="nav-item__content">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                    <span class="nav-item__text">Due Diligence</span>
+                                </div>
+                                <svg class="nav-item__arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </div>
+                             <ul class="sub-nav-list">
+                                <li><a class="sub-nav-item" data-view="duediligence-vetting-view">Entity Vetting</a></li>
+                            </ul>
+                        </div>
                     </nav>
                 </aside>
                 <div class="main-wrapper">
@@ -3108,6 +3440,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div id="nexus-stakeholder-view" class="view view-hidden"></div>
                         <div id="aegis-scenario-view" class="view view-hidden"></div>
                         <div id="amplify-campaign-view" class="view view-hidden"></div>
+                        <div id="duediligence-vetting-view" class="view view-hidden"></div>
                     </main>
                 </div>
             `;
