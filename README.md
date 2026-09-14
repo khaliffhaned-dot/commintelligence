@@ -4,19 +4,45 @@
 
 # Communications Intelligence Platform
 
-This contains everything you need to run your app locally.
+A full-stack app on Tencent CloudBase (TCB):
 
-The app uses Tencent Hunyuan (via its OpenAI-compatible API) for all AI-generated analysis and reports.
+- **Frontend:** a Vite/TypeScript SPA, deployed to CloudBase Static Website Hosting.
+- **Backend:** a single CloudBase cloud function, `hunyuanProxy` (in `cloudfunctions/hunyuanProxy`), which holds the Tencent Hunyuan API key server-side and proxies every AI request. The browser never sees the Hunyuan key — only the public CloudBase environment ID, which is not a secret.
+
+## One-time CloudBase setup
+
+**Prerequisites:** Node.js, a [Tencent CloudBase](https://tcb.cloud.tencent.com/) environment, and the CloudBase CLI (`npm install -g @cloudbase/cli`).
+
+1. Log in and note your environment ID:
+   ```
+   tcb login
+   tcb env:list
+   ```
+2. Create a Hunyuan API key in the Tencent Cloud [TokenHub](https://www.tencentcloud.com/act/pro/tokenhub) console.
+3. Set the two environment variables `cloudbaserc.json` references (either export them in your shell before running `tcb` commands, or substitute them directly in `cloudbaserc.json`):
+   - `TCB_ENV_ID` — your CloudBase environment ID (public, safe to embed in the frontend build).
+   - `HUNYUAN_API_KEY` — the Hunyuan key (secret; only ever goes into the cloud function's server-side config, never into the frontend build).
+4. Deploy the cloud function (uploads the code in `cloudfunctions/hunyuanProxy` and sets `HUNYUAN_API_KEY` as its environment variable):
+   ```
+   tcb fn deploy hunyuanProxy
+   ```
+5. In the CloudBase console, enable **Anonymous Login** under Authentication — the frontend signs in anonymously before calling the function, since anonymous CloudBase calls otherwise get rejected.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
-
 1. Install dependencies:
    `npm install`
-2. Set `HUNYUAN_API_KEY` in `.env.local` to an API key created in the Tencent Cloud [TokenHub](https://www.tencentcloud.com/act/pro/tokenhub) console
+2. Set `TCB_ENV_ID` in `.env.local` to your CloudBase environment ID.
 3. Run the app:
    `npm run dev`
 
-**Security note:** this API key is currently embedded into the client-side bundle at build time (see `vite.config.ts`), meaning anyone who visits the deployed site can extract it from the JS bundle and use it against your Hunyuan quota/billing. This is fine for local development, but before deploying publicly you should route AI calls through a small backend/serverless proxy that holds the key server-side instead.
+Note: local dev calls the *deployed* `hunyuanProxy` cloud function (step 4 above), not Hunyuan directly — there's no API key to set on the frontend anymore.
+
+## Deploy
+
+```
+npm run build
+tcb hosting:deploy dist -e <your-env-id>
+```
+
+(`cloudbaserc.json` is provided for declarative deploys via `tcb deploy` or the CloudBase VS Code extension — check it against your installed CLI version's config schema, since the CLI's config format has changed across versions.)

@@ -5,8 +5,9 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
       define: {
-        'process.env.API_KEY': JSON.stringify(env.HUNYUAN_API_KEY),
-        'process.env.HUNYUAN_API_KEY': JSON.stringify(env.HUNYUAN_API_KEY)
+        // Public CloudBase environment identifier — not a secret. The Hunyuan API key
+        // now lives only in the hunyuanProxy cloud function's server-side env vars.
+        'process.env.TCB_ENV_ID': JSON.stringify(env.TCB_ENV_ID)
       },
       resolve: {
         alias: {

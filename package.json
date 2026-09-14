@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "openai": "^7.15.0"
+    "@cloudbase/js-sdk": "^3.9.4"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

@@ -3,46 +3,41 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import OpenAI from "openai";
+import cloudbase from "@cloudbase/js-sdk";
 
-// Initialize the Tencent Hunyuan client via its OpenAI-compatible endpoint.
-// In a production environment, this would be on a secure backend server.
-const HUNYUAN_TEXT_MODEL = 'hunyuan-turbo';
-const HUNYUAN_VISION_MODEL = 'hunyuan-vision';
-const ai = new OpenAI({
-    apiKey: process.env.API_KEY!,
-    baseURL: 'https://hunyuan.cloud.tencent.com/openai/v1',
-    dangerouslyAllowBrowser: true,
-    timeout: 30000,
-    maxRetries: 1,
-});
+// Initialize the CloudBase app. The env ID is a public project identifier (safe to
+// embed in the client bundle) — it is NOT a secret. The Hunyuan API key itself lives
+// only in the `hunyuanProxy` cloud function's server-side environment variables.
+const tcbApp = cloudbase.init({ env: process.env.TCB_ENV_ID! });
+const tcbAuth = tcbApp.auth();
+let tcbAuthReady: Promise<any> | null = null;
+
+function ensureTcbAuth(): Promise<any> {
+    if (!tcbAuthReady) {
+        tcbAuthReady = tcbAuth.signInAnonymously().catch((e: any) => {
+            tcbAuthReady = null; // allow retrying on the next call if sign-in failed
+            throw e;
+        });
+    }
+    return tcbAuthReady;
+}
 
 /**
- * Calls Hunyuan's chat completions endpoint and parses the JSON object it returns.
- * Hunyuan's OpenAI-compatible API enforces valid JSON via response_format but not a
- * strict schema, so every caller's prompt must spell out the exact JSON shape it expects.
+ * Calls the `hunyuanProxy` cloud function, which forwards the request to Hunyuan's
+ * chat completions endpoint server-side and returns the parsed JSON object.
  */
 async function generateJson(prompt: string, imageParts?: { mimeType: string, data: string }[]): Promise<any> {
-    const content: any = imageParts && imageParts.length
-        ? [
-            { type: 'text', text: prompt },
-            ...imageParts.map(img => ({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.data}` } }))
-        ]
-        : prompt;
+    await ensureTcbAuth();
 
-    const response = await ai.chat.completions.create({
-        model: imageParts && imageParts.length ? HUNYUAN_VISION_MODEL : HUNYUAN_TEXT_MODEL,
-        messages: [{ role: 'user', content }],
-        response_format: { type: 'json_object' },
+    const { result } = await tcbApp.callFunction({
+        name: 'hunyuanProxy',
+        data: { prompt, imageParts },
     });
 
-    let jsonText = (response.choices[0].message.content || '').trim();
-    if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.substring(7, jsonText.length - 3).trim();
-    } else if (jsonText.startsWith('```')) {
-        jsonText = jsonText.substring(3, jsonText.length - 3).trim();
+    if (result?.error) {
+        throw new Error(result.error);
     }
-    return JSON.parse(jsonText);
+    return result.result;
 }
 
 declare var L: any;
