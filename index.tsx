@@ -3,11 +3,47 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import { GoogleGenAI, Type } from "@google/genai";
+import OpenAI from "openai";
 
-// Initialize the Gemini API client.
+// Initialize the Tencent Hunyuan client via its OpenAI-compatible endpoint.
 // In a production environment, this would be on a secure backend server.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+const HUNYUAN_TEXT_MODEL = 'hunyuan-turbo';
+const HUNYUAN_VISION_MODEL = 'hunyuan-vision';
+const ai = new OpenAI({
+    apiKey: process.env.API_KEY!,
+    baseURL: 'https://hunyuan.cloud.tencent.com/openai/v1',
+    dangerouslyAllowBrowser: true,
+    timeout: 30000,
+    maxRetries: 1,
+});
+
+/**
+ * Calls Hunyuan's chat completions endpoint and parses the JSON object it returns.
+ * Hunyuan's OpenAI-compatible API enforces valid JSON via response_format but not a
+ * strict schema, so every caller's prompt must spell out the exact JSON shape it expects.
+ */
+async function generateJson(prompt: string, imageParts?: { mimeType: string, data: string }[]): Promise<any> {
+    const content: any = imageParts && imageParts.length
+        ? [
+            { type: 'text', text: prompt },
+            ...imageParts.map(img => ({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.data}` } }))
+        ]
+        : prompt;
+
+    const response = await ai.chat.completions.create({
+        model: imageParts && imageParts.length ? HUNYUAN_VISION_MODEL : HUNYUAN_TEXT_MODEL,
+        messages: [{ role: 'user', content }],
+        response_format: { type: 'json_object' },
+    });
+
+    let jsonText = (response.choices[0].message.content || '').trim();
+    if (jsonText.startsWith('```json')) {
+        jsonText = jsonText.substring(7, jsonText.length - 3).trim();
+    } else if (jsonText.startsWith('```')) {
+        jsonText = jsonText.substring(3, jsonText.length - 3).trim();
+    }
+    return JSON.parse(jsonText);
+}
 
 declare var L: any;
 declare var ApexCharts: any;
@@ -194,11 +230,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     try {
-        // --- Backend Service Integration ---
-        // The application now communicates with a backend service (e.g., on Google Cloud Run).
-        // This service handles all database interactions (with AlloyDB/BigQuery) and
-        // secure calls to the Vertex AI Gemini API, forming a robust full-stack architecture.
-        
         const landingPage = document.getElementById('landing-page');
         const appContainer = document.getElementById('app-container');
 
@@ -375,66 +406,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 2.  'sentimentOverTime': An object with 'categories' (an array of the last 6 months, e.g., ["Jan", "Feb", ...]) and 'series' (an array of 3 objects for 'Positive', 'Neutral', 'Negative', each with a 'name' and 'data' array of 6 integer percentages).
                 3.  'keyTopics': An object with 'labels' (an array of 5 trending topic strings associated with this coalition) and 'series' (an array of 5 corresponding integer values representing their prevalence).
             `;
-            const responseSchema = {
-                type: Type.OBJECT,
-                properties: {
-                    regionalSentiment: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                region: { type: Type.STRING },
-                                lat: { type: Type.NUMBER },
-                                lng: { type: Type.NUMBER },
-                                positive: { type: Type.INTEGER },
-                                neutral: { type: Type.INTEGER },
-                                negative: { type: Type.INTEGER },
-                                buzz: { type: Type.INTEGER },
-                            }
-                        }
-                    },
-                    sentimentOverTime: {
-                        type: Type.OBJECT,
-                        properties: {
-                            categories: { type: Type.ARRAY, items: { type: Type.STRING } },
-                            series: {
-                                type: Type.ARRAY,
-                                items: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        name: { type: Type.STRING },
-                                        data: { type: Type.ARRAY, items: { type: Type.INTEGER } }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    keyTopics: {
-                        type: Type.OBJECT,
-                        properties: {
-                            labels: { type: Type.ARRAY, items: { type: Type.STRING } },
-                            series: { type: Type.ARRAY, items: { type: Type.INTEGER } }
-                        }
-                    },
-                }
-            };
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-                config: {
-                    responseMimeType: 'application/json',
-                    responseSchema: responseSchema,
-                }
-            });
-
-            let jsonText = response.text.trim();
-            if (jsonText.startsWith('```json')) {
-                jsonText = jsonText.substring(7, jsonText.length - 3).trim();
-            } else if (jsonText.startsWith('```')) {
-                jsonText = jsonText.substring(3, jsonText.length - 3).trim();
-            }
-            return JSON.parse(jsonText);
+            return generateJson(prompt);
         }
 
         async function fetchMarketIntelligenceData(client: Client) {
@@ -455,96 +427,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 5.  'sentimentComparison': An object with 'labels' (same as shareOfVoice labels) and 'series' (an array of 3 objects for 'Positive', 'Neutral', 'Negative', each with 'name' and 'data' array of 4 sentiment scores from 0-100).
                 6.  'competitorInsights': A concise paragraph (string) summarizing a key insight about a competitor's recent activities.
             `;
-
-            const responseSchema = {
-                type: Type.OBJECT,
-                properties: {
-                    regionalSentiment: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                region: { type: Type.STRING },
-                                lat: { type: Type.NUMBER },
-                                lng: { type: Type.NUMBER },
-                                positive: { type: Type.INTEGER },
-                                neutral: { type: Type.INTEGER },
-                                negative: { type: Type.INTEGER },
-                                buzz: { type: Type.INTEGER },
-                            }
-                        }
-                    },
-                    sentimentOverTime: {
-                        type: Type.OBJECT,
-                        properties: {
-                            categories: { type: Type.ARRAY, items: { type: Type.STRING } },
-                            series: {
-                                type: Type.ARRAY,
-                                items: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        name: { type: Type.STRING },
-                                        data: { type: Type.ARRAY, items: { type: Type.INTEGER } }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    keyTopics: {
-                        type: Type.OBJECT,
-                        properties: {
-                            labels: { type: Type.ARRAY, items: { type: Type.STRING } },
-                            series: { type: Type.ARRAY, items: { type: Type.INTEGER } }
-                        }
-                    },
-                    shareOfVoice: {
-                        type: Type.OBJECT,
-                        properties: {
-                            labels: { type: Type.ARRAY, items: { type: Type.STRING } },
-                            series: { type: Type.ARRAY, items: { type: Type.INTEGER } }
-                        }
-                    },
-                    sentimentComparison: {
-                        type: Type.OBJECT,
-                        properties: {
-                            labels: { type: Type.ARRAY, items: { type: Type.STRING } },
-                            series: {
-                                type: Type.ARRAY,
-                                items: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        name: { type: Type.STRING },
-                                        data: { type: Type.ARRAY, items: { type: Type.INTEGER } }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    competitorInsights: { type: Type.STRING },
-                }
-            };
-            
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-                config: {
-                    responseMimeType: 'application/json',
-                    responseSchema: responseSchema,
-                }
-            });
-
-            // FIX: The model can sometimes wrap the JSON in markdown. Clean it up for robust parsing.
-            let jsonText = response.text.trim();
-            if (jsonText.startsWith('```json')) {
-                jsonText = jsonText.substring(7, jsonText.length - 3).trim();
-            } else if (jsonText.startsWith('```')) {
-                 jsonText = jsonText.substring(3, jsonText.length - 3).trim();
-            }
-
             try {
-                return JSON.parse(jsonText);
+                return await generateJson(prompt);
             } catch (e) {
-                console.error("Failed to parse market intelligence JSON:", jsonText, e);
+                console.error("Failed to parse market intelligence JSON:", e);
                 throw e; // Re-throw to be caught by the caller
             }
         }
@@ -1132,7 +1018,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         /**
-         * Generates a new mention from the Gemini API and adds it to the feed.
+         * Generates a new mention from the Hunyuan API and adds it to the feed.
          */
         async function addNewSignalMention() {
             try {
@@ -1152,27 +1038,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     - "sentiment": "Positive", "Neutral", or "Negative".
                 `;
 
-                const responseSchema = {
-                    type: Type.OBJECT,
-                    properties: {
-                        type: { type: Type.STRING },
-                        source: { type: Type.STRING },
-                        author: { type: Type.STRING },
-                        content: { type: Type.STRING },
-                        sentiment: { type: Type.STRING },
-                    }
-                };
-
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: {
-                        responseMimeType: "application/json",
-                        responseSchema: responseSchema,
-                    }
-                });
-
-                const mention = JSON.parse(response.text);
+                const mention = await generateJson(prompt);
 
                 const mentionConfig = {
                     news: { colId: 'signal-col-news', icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>` },
@@ -1300,25 +1166,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     3. "stakeholders": A short paragraph listing the primary groups that will be most affected by this policy.
                 `;
 
-                const responseSchema = {
-                    type: Type.OBJECT,
-                    properties: {
-                        impactScore: { type: Type.INTEGER },
-                        summary: { type: Type.STRING },
-                        stakeholders: { type: Type.STRING }
-                    }
-                };
-                
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: {
-                        responseMimeType: 'application/json',
-                        responseSchema: responseSchema
-                    }
-                });
-
-                const analysis = JSON.parse(response.text);
+                const analysis = await generateJson(prompt);
                 
                 const impactColorClass = analysis.impactScore > 7
                     ? 'impact-score__value--high'
@@ -1436,17 +1284,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     The response should be a single, detailed paragraph.
                     Return a single valid JSON object with one key: "responsePlan".
                 `;
-                const responseSchema = { type: Type.OBJECT, properties: { responsePlan: { type: Type.STRING } } };
-
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: {
-                        responseMimeType: 'application/json',
-                        responseSchema: responseSchema,
-                    }
-                });
-                const result = JSON.parse(response.text);
+                const result = await generateJson(prompt);
 
                 outputContainer.innerHTML = `
                     <h5>AI Recommended First Response for "${scenario}":</h5>
@@ -1559,17 +1397,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     1. "pressRelease": A creative headline and one-sentence summary for a press release.
                     2. "socialMediaPost": A short, engaging social media post text suitable for LinkedIn or Facebook.
                 `;
-                const responseSchema = { type: Type.OBJECT, properties: { pressRelease: { type: Type.STRING }, socialMediaPost: { type: Type.STRING } } };
-                
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: {
-                        responseMimeType: 'application/json',
-                        responseSchema: responseSchema,
-                    }
-                });
-                const ideas = JSON.parse(response.text);
+                const ideas = await generateJson(prompt);
 
                 container.innerHTML = `
                     <div>
@@ -1673,46 +1501,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         - "timescale": The predicted time to reach peak virality (e.g., "6-12 hours", "2-3 days").
                 `;
 
-                const responseSchema = {
-                    type: Type.OBJECT,
-                    properties: {
-                        riskScore: { type: Type.INTEGER },
-                        scoreJustification: { type: Type.STRING },
-                        overallAssessment: { type: Type.STRING },
-                        recommendedAction: { type: Type.STRING },
-                        complianceChecks: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    checkName: { type: Type.STRING },
-                                    severity: { type: Type.STRING },
-                                    details: { type: Type.STRING },
-                                }
-                            }
-                        },
-                        propagation: {
-                            type: Type.OBJECT,
-                            properties: {
-                                viralityScore: { type: Type.INTEGER },
-                                reachEstimate: { type: Type.INTEGER },
-                                keyAmplifier: { type: Type.STRING },
-                                timescale: { type: Type.STRING },
-                            }
-                        }
-                    }
-                };
-                
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: {
-                        responseMimeType: 'application/json',
-                        responseSchema: responseSchema,
-                    }
-                });
-
-                const result = JSON.parse(response.text);
+                const result = await generateJson(prompt);
                 appState.latestVerificationResult = result;
                 
                 // Cache the propagation data for the other view
@@ -1824,31 +1613,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (exportButton) exportButton.style.display = 'none';
 
             try {
-                const prompt = promptInput.value.trim() || "Analyze this image in detail. Describe what you see, identify key objects and concepts, and assess its brand safety.";
-                const responseSchema = {
-                    type: Type.OBJECT,
-                    properties: {
-                        description: { type: Type.STRING },
-                        identifiedObjects: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        brandSafety: { type: Type.STRING, description: "Should be 'Safe', 'Neutral', or 'High-Risk'" },
-                    }
-                };
+                const userPrompt = promptInput.value.trim() || "Analyze this image in detail. Describe what you see, identify key objects and concepts, and assess its brand safety.";
+                const prompt = `
+                    Analyze the image based on this prompt: "${userPrompt}".
+                    Return a single valid JSON object with the following keys:
+                    1. "description": A detailed description of the image (string).
+                    2. "identifiedObjects": An array of strings naming the key objects/concepts identified.
+                    3. "brandSafety": One of "Safe", "Neutral", or "High-Risk".
+                `;
 
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: {
-                        parts: [
-                            { inlineData: { mimeType: appState.uploadedImageData.mimeType, data: appState.uploadedImageData.data } },
-                            { text: `Analyze the image based on this prompt: "${prompt}". Provide the output as a valid JSON object.` }
-                        ]
-                    },
-                    config: {
-                        responseMimeType: 'application/json',
-                        responseSchema: responseSchema,
-                    }
-                });
-
-                const result = JSON.parse(response.text);
+                const result = await generateJson(prompt, [
+                    { mimeType: appState.uploadedImageData.mimeType, data: appState.uploadedImageData.data }
+                ]);
                 
                 // Combine original image with the result for display
                 const finalResult = {
@@ -2214,7 +1990,7 @@ document.addEventListener('DOMContentLoaded', () => {
             outputContainer.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>AI is analyzing the video. This may take a moment...</p></div>`;
             
             try {
-                // NOTE: Gemini cannot directly access URLs. This prompt asks the model to *simulate* an analysis.
+                // NOTE: The model cannot directly access URLs. This prompt asks it to *simulate* an analysis.
                 // A production backend would use tools to download and transcribe the video before passing content to the model.
                 const prompt = `
                     You are a video analysis AI. A user has provided this URL: "${urlInput.value}".
@@ -2224,22 +2000,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     2. "topics": An array of 3-5 key topics discussed in the video (array of strings).
                     3. "transcript": A short, plausible excerpt of the video's transcript (a single string with line breaks).
                 `;
-                const responseSchema = {
-                    type: Type.OBJECT,
-                    properties: {
-                        summary: { type: Type.STRING },
-                        topics: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        transcript: { type: Type.STRING }
-                    }
-                };
-
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: { responseMimeType: 'application/json', responseSchema: responseSchema }
-                });
-
-                const result = JSON.parse(response.text);
+                const result = await generateJson(prompt);
                 
                 outputContainer.innerHTML = `
                     <div class="card">
@@ -2278,188 +2039,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p class="text-secondary">Create short video clips from text prompts and images.</p>
                     </div>
                 </div>
-                <div class="video-generation-grid">
-                    <div class="card">
-                        <div class="card__header"><h3>Video Prompt</h3></div>
-                        <div class="card__body">
-                            <div class="form-group">
-                                <label for="video-prompt-input">Prompt</label>
-                                <textarea id="video-prompt-input" class="form-textarea" placeholder="e.g., A neon hologram of a cat driving at top speed"></textarea>
-                            </div>
-                             <div class="form-group">
-                                <label>Optional: Add an image</label>
-                                <div id="video-gen-upload-dropzone" class="image-dropzone">
-                                    <input type="file" id="video-gen-upload-input" accept="image/*" style="display: none;">
-                                    <div class="image-dropzone-prompt"><p>Drop image here or click to upload</p></div>
-                                </div>
-                                <div id="video-gen-preview-container" class="image-preview hidden">
-                                    <img id="video-gen-preview-element" src="#" alt="Image preview" />
-                                    <button id="video-gen-remove-button" class="btn btn--icon image-preview__remove-btn" aria-label="Remove image">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                    </button>
-                                </div>
-                            </div>
-                            <button id="generate-video-button" class="btn btn--primary">Generate Video</button>
-                        </div>
-                    </div>
-                    <div id="video-generation-output">
-                        <div class="empty-state">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
-                            <h4>Ready to Create</h4>
-                            <p>Describe the video you want to generate. The process may take a few minutes.</p>
-                        </div>
-                    </div>
+                <div class="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
+                    <h3>Not Available on This Provider</h3>
+                    <p>Video generation previously used Google's Veo model, which has no equivalent on Hunyuan's OpenAI-compatible chat API. Tencent's native video generation service uses a different authentication scheme (Tencent Cloud SecretId/SecretKey request signing) that must never run in the browser, so this feature needs a small backend proxy before it can be re-enabled.</p>
                 </div>
             `;
-
-            // Setup image upload logic
-            const dropzone = document.getElementById('video-gen-upload-dropzone');
-            const fileInput = document.getElementById('video-gen-upload-input') as HTMLInputElement;
-            const previewContainer = document.getElementById('video-gen-preview-container');
-            const previewElement = document.getElementById('video-gen-preview-element') as HTMLImageElement;
-            const removeButton = document.getElementById('video-gen-remove-button');
-            const generateButton = document.getElementById('generate-video-button') as HTMLButtonElement;
-
-            const handleFile = (file: File) => {
-                 if (file && file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const base64String = (e.target?.result as string).split(',')[1];
-                        // Store data on the button itself
-                        generateButton.dataset.imageData = JSON.stringify({ mimeType: file.type, data: base64String });
-                        
-                        if (previewElement && dropzone && previewContainer) {
-                            previewElement.src = e.target?.result as string;
-                            dropzone.classList.add('hidden');
-                            previewContainer.classList.remove('hidden');
-                        }
-                    };
-                    reader.readAsDataURL(file);
-                }
-            };
-            
-            const resetUploader = () => {
-                if (fileInput) fileInput.value = '';
-                delete generateButton.dataset.imageData;
-                if (previewContainer) previewContainer.classList.add('hidden');
-                if (dropzone) dropzone.classList.remove('hidden');
-            };
-
-            dropzone?.addEventListener('click', () => fileInput.click());
-            fileInput?.addEventListener('change', () => fileInput.files?.length && handleFile(fileInput.files[0]));
-            removeButton?.addEventListener('click', resetUploader);
-
-            generateButton?.addEventListener('click', handleVideoGeneration);
         }
 
-        async function handleVideoGeneration() {
-            const promptInput = document.getElementById('video-prompt-input') as HTMLTextAreaElement;
-            const outputContainer = document.getElementById('video-generation-output');
-            const button = document.getElementById('generate-video-button') as HTMLButtonElement;
-            
-            if (!promptInput?.value || !outputContainer || !button) return;
-            const prompt = promptInput.value.trim();
-            const imageDataStr = button.dataset.imageData;
-            
-            button.disabled = true;
-            button.innerHTML = '<div class="spinner"></div> Generating...';
-
-            const progressMessages = [
-                "Initializing video generation...",
-                "Storyboarding the prompt...",
-                "Gathering visual assets...",
-                "Compositing initial scenes...",
-                "Rendering frames (this takes time)...",
-                "Enhancing video quality...",
-                "Applying final touches...",
-                "Almost there, finalizing video...",
-            ];
-            let messageIndex = 0;
-            
-            const updateProgressMessage = () => {
-                if (outputContainer) {
-                    outputContainer.innerHTML = `
-                        <div class="card video-progress-container">
-                            <div class="card__body">
-                                <div class="spinner-large"></div>
-                                <h4>Generation in Progress</h4>
-                                <p id="video-progress-message">${progressMessages[messageIndex % progressMessages.length]}</p>
-                            </div>
-                        </div>
-                    `;
-                    messageIndex++;
-                }
-            };
-            
-            updateProgressMessage();
-            const progressInterval = setInterval(updateProgressMessage, 8000); // Change message every 8s
-
-            try {
-                const generateVideoParams: any = {
-                    model: 'veo-2.0-generate-001',
-                    prompt: prompt,
-                    config: {
-                        numberOfVideos: 1
-                    }
-                };
-
-                if (imageDataStr) {
-                    const imageData = JSON.parse(imageDataStr);
-                    generateVideoParams.image = {
-                        imageBytes: imageData.data,
-                        mimeType: imageData.mimeType,
-                    };
-                }
-
-                let operation = await ai.models.generateVideos(generateVideoParams);
-
-                while (!operation.done) {
-                    await new Promise(resolve => setTimeout(resolve, 10000)); // Poll every 10s
-                    operation = await ai.operations.getVideosOperation({ operation: operation });
-                }
-                
-                clearInterval(progressInterval);
-
-                if (operation.response?.generatedVideos?.[0]?.video?.uri) {
-                    const downloadLink = operation.response.generatedVideos[0].video.uri;
-                    // Fetch the video data
-                    outputContainer.innerHTML = `<div class="card video-progress-container"><div class="card__body"><div class="spinner-large"></div><h4>Fetching Video...</h4><p>Your video is ready, preparing it for display.</p></div></div>`;
-                    const videoResponse = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
-                    if (!videoResponse.ok) {
-                        throw new Error(`Failed to fetch video: ${videoResponse.statusText}`);
-                    }
-                    const videoBlob = await videoResponse.blob();
-                    const videoUrl = URL.createObjectURL(videoBlob);
-                    
-                    outputContainer.innerHTML = `
-                        <div class="card video-result-container">
-                            <div class="card__header"><h3>Generated Video</h3></div>
-                            <div class="card__body">
-                                <video controls autoplay loop muted playsinline src="${videoUrl}" class="generated-video-player"></video>
-                                <a href="${videoUrl}" download="prvail-generated-video.mp4" class="btn btn--primary">Download Video</a>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    throw new Error("Video generation completed, but no video URI was returned.");
-                }
-
-            } catch (e) {
-                clearInterval(progressInterval);
-                console.error("Video generation failed:", e);
-                const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-                outputContainer.innerHTML = `
-                    <div class="empty-state">
-                        <h4>Generation Failed</h4>
-                        <p class="error-message">Could not generate the video. Please try a different prompt or check the console for details.</p>
-                        <code>${errorMessage}</code>
-                    </div>`;
-            } finally {
-                button.disabled = false;
-                button.innerHTML = 'Generate Video';
-            }
-        }
-        
         /** Renders Veritas: Deepfake Detection View */
         function renderVeritasDeepfakeView() {
             const container = document.getElementById('veritas-deepfake-view');
@@ -2556,16 +2143,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     1. "authenticityScore": An integer from 0 (likely manipulated) to 100 (likely authentic).
                     2. "assessment": A brief paragraph explaining your reasoning for the score.
                 `;
-                const responseSchema = { type: Type.OBJECT, properties: { authenticityScore: { type: Type.INTEGER }, assessment: { type: Type.STRING } } };
                 const imagePart = JSON.parse(imageData);
 
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: { parts: [{ inlineData: imagePart }, { text: prompt }] },
-                    config: { responseMimeType: 'application/json', responseSchema: responseSchema }
-                });
-
-                const result = JSON.parse(response.text);
+                const result = await generateJson(prompt, [imagePart]);
                 
                 const circumference = 2 * Math.PI * 45;
                 const offset = circumference - (result.authenticityScore / 100) * circumference;
@@ -2721,30 +2301,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     1. "stakes": An object where keys are "government", "opposition", "ngos", "industry", "media" and values are their stance ("For", "Against", "Neutral").
                     2. "insights": A brief paragraph summarizing the overall stakeholder landscape and potential points of contention or alliance.
                 `;
-                const responseSchema = {
-                    type: Type.OBJECT,
-                    properties: {
-                        stakes: {
-                            type: Type.OBJECT,
-                            properties: {
-                                government: { type: Type.STRING },
-                                opposition: { type: Type.STRING },
-                                ngos: { type: Type.STRING },
-                                industry: { type: Type.STRING },
-                                media: { type: Type.STRING },
-                            }
-                        },
-                        insights: { type: Type.STRING }
-                    }
-                };
-                
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: { responseMimeType: 'application/json', responseSchema: responseSchema }
-                });
-
-                const result = await JSON.parse(response.text);
+                const result = await generateJson(prompt);
                 
                 outputContainer.innerHTML = `
                      <div class="stakeholder-map-container">
@@ -2842,21 +2399,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     2. "shortTerm": An array of 3-4 strings for actions during the first week.
                     3. "longTerm": An array of 3-4 strings for recovery and reputation rebuilding actions.
                 `;
-                const responseSchema = {
-                    type: Type.OBJECT,
-                    properties: {
-                        immediate: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        shortTerm: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        longTerm: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    }
-                };
-
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: { responseMimeType: 'application/json', responseSchema: responseSchema }
-                });
-                const result = await JSON.parse(response.text);
+                const result = await generateJson(prompt);
                 
                 outputContainer.innerHTML = `
                     <div class="card" id="scenario-plan-export-content">
@@ -2948,32 +2491,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     2. "keyMessage": The single most important message the campaign should convey, in one sentence.
                     3. "timeline": An array of 3 objects, each representing a phase of the campaign (e.g., Teaser, Launch, Sustain). Each object must have "phase", "duration" (e.g., "Week 1-2"), and "description" (a brief summary of activities).
                 `;
-                const responseSchema = {
-                    type: Type.OBJECT,
-                    properties: {
-                        campaignName: { type: Type.STRING },
-                        keyMessage: { type: Type.STRING },
-                        timeline: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    phase: { type: Type.STRING },
-                                    duration: { type: Type.STRING },
-                                    description: { type: Type.STRING },
-                                }
-                            }
-                        }
-                    }
-                };
-                
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: { responseMimeType: 'application/json', responseSchema: responseSchema }
-                });
-
-                const result = await JSON.parse(response.text);
+                const result = await generateJson(prompt);
 
                 const timelineHtml = result.timeline.map((item: any) => `
                     <div class="timeline-item">
@@ -3124,86 +2642,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 `;
 
-                const responseSchema = {
-                    type: Type.OBJECT,
-                    properties: {
-                        overallRiskScore: { type: Type.INTEGER },
-                        riskLevel: { type: Type.STRING },
-                        recommendation: { type: Type.STRING },
-                        executiveSummary: { type: Type.STRING },
-                        politicalExposure: {
-                            type: Type.OBJECT,
-                            properties: {
-                                coalitionAffiliations: {
-                                    type: Type.ARRAY,
-                                    items: {
-                                        type: Type.OBJECT,
-                                        properties: {
-                                            coalition: { type: Type.STRING },
-                                            strength: { type: Type.STRING },
-                                        }
-                                    }
-                                },
-                                influenceScore: { type: Type.INTEGER },
-                                keyRelationships: {
-                                    type: Type.ARRAY,
-                                    items: {
-                                        type: Type.OBJECT,
-                                        properties: {
-                                            name: { type: Type.STRING },
-                                            relationship: { type: Type.STRING },
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        sensitivityChecks: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    area: { type: Type.STRING },
-                                    severity: { type: Type.STRING },
-                                    details: { type: Type.STRING },
-                                }
-                            }
-                        },
-                        integrityFlags: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    flag: { type: Type.STRING },
-                                    severity: { type: Type.STRING },
-                                    details: { type: Type.STRING },
-                                }
-                            }
-                        },
-                        stakeholderReactions: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    stakeholder: { type: Type.STRING },
-                                    reaction: { type: Type.STRING },
-                                }
-                            }
-                        },
-                        mitigationStrategies: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        confidenceLevel: { type: Type.INTEGER },
-                    }
-                };
-
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: {
-                        responseMimeType: 'application/json',
-                        responseSchema: responseSchema,
-                    }
-                });
-
-                const result = JSON.parse(response.text);
+                const result = await generateJson(prompt);
                 renderDueDiligenceResults(entityName, entityType, result);
                 if (exportButton) exportButton.style.display = 'inline-flex';
 
@@ -3388,79 +2827,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 Keep the analysis balanced and analytical (not promotional toward any single coalition), grounded in plausible,
                 current Malaysian political dynamics (economy/cost of living, coalition stability, leadership approval, state-level contests).
             `;
-            const responseSchema = {
-                type: Type.OBJECT,
-                properties: {
-                    asOfPeriod: { type: Type.STRING },
-                    nationalMood: {
-                        type: Type.OBJECT,
-                        properties: {
-                            rightDirectionPct: { type: Type.INTEGER },
-                            wrongDirectionPct: { type: Type.INTEGER },
-                            topIssues: {
-                                type: Type.ARRAY,
-                                items: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        issue: { type: Type.STRING },
-                                        pct: { type: Type.INTEGER },
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    coalitions: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                coalition: { type: Type.STRING },
-                                fullName: { type: Type.STRING },
-                                overallApproval: { type: Type.INTEGER },
-                                sentiment: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        positive: { type: Type.INTEGER },
-                                        neutral: { type: Type.INTEGER },
-                                        negative: { type: Type.INTEGER },
-                                    }
-                                },
-                                trend: { type: Type.STRING },
-                                topLeaders: {
-                                    type: Type.ARRAY,
-                                    items: {
-                                        type: Type.OBJECT,
-                                        properties: {
-                                            name: { type: Type.STRING },
-                                            approvalPct: { type: Type.INTEGER },
-                                        }
-                                    }
-                                },
-                                strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                vulnerabilities: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                trendingNarratives: { type: Type.ARRAY, items: { type: Type.STRING } },
-                            }
-                        }
-                    }
-                }
-            };
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-                config: {
-                    responseMimeType: 'application/json',
-                    responseSchema: responseSchema,
-                }
-            });
-
-            let jsonText = response.text.trim();
-            if (jsonText.startsWith('```json')) {
-                jsonText = jsonText.substring(7, jsonText.length - 3).trim();
-            } else if (jsonText.startsWith('```')) {
-                jsonText = jsonText.substring(3, jsonText.length - 3).trim();
-            }
-            return JSON.parse(jsonText);
+            return generateJson(prompt);
         }
 
         function renderPartyTrackerContent(data: any) {
