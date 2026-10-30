@@ -1,0 +1,25 @@
+{
+  "envId": "{env:TCB_ENV_ID}",
+  "version": "1.0",
+  "functionRoot": "./cloudfunctions",
+  "functions": [
+    {
+      "name": "hunyuanProxy",
+      "timeout": 30,
+      "envVariables": {
+        "HUNYUAN_API_KEY": "{env:HUNYUAN_API_KEY}"
+      },
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "handler": "index.main"
+    }
+  ],
+  "hosting": {
+    "localPath": "./dist",
+    "cloudPath": "/",
+    "ignore": [
+      ".DS_Store",
+      "node_modules"
+    ]
+  }
+}
