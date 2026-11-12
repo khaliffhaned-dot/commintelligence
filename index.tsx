@@ -3,47 +3,35 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import cloudbase from "@cloudbase/js-sdk";
-
-// Initialize the CloudBase app. The env ID is a public project identifier (safe to
-// embed in the client bundle) — it is NOT a secret. The Hunyuan API key itself lives
-// only in the `hunyuanProxy` cloud function's server-side environment variables.
-const tcbApp = cloudbase.init({ env: process.env.TCB_ENV_ID! });
-const tcbAuth = tcbApp.auth();
-let tcbAuthReady: Promise<any> | null = null;
-
-function ensureTcbAuth(): Promise<any> {
-    if (!tcbAuthReady) {
-        tcbAuthReady = tcbAuth.signInAnonymously().catch((e: any) => {
-            tcbAuthReady = null; // allow retrying on the next call if sign-in failed
-            throw e;
-        });
-    }
-    return tcbAuthReady;
-}
-
 /**
- * Calls the `hunyuanProxy` cloud function, which forwards the request to Hunyuan's
- * chat completions endpoint server-side and returns the parsed JSON object.
+ * Calls the Cloudflare Pages Function at /api/ai, which holds HUNYUAN_API_KEY
+ * server-side, forwards the request to Hunyuan and returns the parsed JSON object.
  */
 async function generateJson(prompt: string, imageParts?: { mimeType: string, data: string }[]): Promise<any> {
-    if (!process.env.TCB_ENV_ID) {
-        throw new Error('AI backend is not configured: TCB_ENV_ID was not set when this app was built. Set it in .env.local (local) or as a build environment variable (hosting), then rebuild.');
+    let response: Response;
+    try {
+        response = await fetch('/api/ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, imageParts }),
+        });
+    } catch (e: any) {
+        throw new Error(`Could not reach the AI backend: ${e.message}`);
     }
-    await ensureTcbAuth();
 
-    const { result } = await tcbApp.callFunction({
-        name: 'hunyuanProxy',
-        data: { prompt, imageParts },
-    });
-
-    if (!result) {
-        throw new Error('The hunyuanProxy cloud function returned no response. Check that it is deployed.');
+    let body: any = null;
+    try {
+        body = await response.json();
+    } catch {
+        // Non-JSON response (e.g. SPA fallback HTML when the function isn't deployed).
     }
-    if (result.error) {
-        throw new Error(result.error);
+    if (!body) {
+        throw new Error(`The AI backend (/api/ai) returned an unexpected response (HTTP ${response.status}). Check that the Pages Function is deployed.`);
     }
-    return result.result;
+    if (body.error) {
+        throw new Error(body.error);
+    }
+    return body.result;
 }
 
 declare var L: any;

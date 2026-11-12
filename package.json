@@ -9,11 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@cloudbase/js-sdk": "^3.9.4"
+    "html2canvas": "^1.4.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true,
+    "core-js-pure@3.50.0": true
   }
 }

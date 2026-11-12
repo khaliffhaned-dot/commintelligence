@@ -1,18 +1,16 @@
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 
-export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, '.', '');
-    return {
-      define: {
-        // Public CloudBase environment identifier — not a secret. The Hunyuan API key
-        // now lives only in the hunyuanProxy cloud function's server-side env vars.
-        'process.env.TCB_ENV_ID': JSON.stringify(env.TCB_ENV_ID)
-      },
-      resolve: {
+export default defineConfig({
+    resolve: {
         alias: {
-          '@': path.resolve(__dirname, '.'),
+            '@': path.resolve(__dirname, '.'),
         }
-      }
-    };
+    },
+    server: {
+        // Forward /api/* to `wrangler pages dev` (run on :8788) so the Pages Function works locally.
+        proxy: {
+            '/api': 'http://127.0.0.1:8788',
+        },
+    },
 });
