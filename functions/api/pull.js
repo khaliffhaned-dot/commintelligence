@@ -55,6 +55,7 @@ export async function onRequestPost({ env }) {
         return parseRss(await res.text(), 10).map((it) => ({ ...it, query: q }));
     }));
     const feedErrors = fetched.filter((r) => r.status === 'rejected').length;
+    const feedErrorSamples = [...new Set(fetched.filter((r) => r.status === 'rejected').map((r) => String(r.reason && r.reason.message)))].slice(0, 3);
     const articles = fetched.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
 
     // 2. De-duplicate within this pull and against what is already stored.
@@ -103,6 +104,7 @@ export async function onRequestPost({ env }) {
         ok: true,
         fetchedFeeds: QUERIES.length - feedErrors,
         failedFeeds: feedErrors,
+        feedErrorSamples,
         newItems: fresh.length,
         classified: toClassify.filter((a) => a.classified).length,
         aiFailures,
