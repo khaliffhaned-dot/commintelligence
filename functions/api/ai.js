@@ -1,4 +1,5 @@
-const DEFAULT_BASE_URL = 'https://tokenhub-intl.tencentcloudmaas.com/v1';const DEFAULT_MODEL = 'hy3-preview';
+const DEFAULT_BASE_URL = 'https://tokenhub-intl.tencentcloudmaas.com/v1';
+const DEFAULT_MODEL = 'hy3-preview';
 
 const json = (body, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -38,7 +39,7 @@ export async function onRequestPost({ request, env }) {
 
     let response;
     try {
-        response = await fetch(`${(env.HUNYUAN_BASE_URL || DEFAULT_BASE_URL).replace(//$/, '')}/chat/completions`, {
+        response = await fetch(`${(env.HUNYUAN_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.HUNYUAN_API_KEY}` },
             body: JSON.stringify({
