@@ -1,7 +1,7 @@
-import { QUERIES, SECTORS, PARTIES, SENTIMENTS, rssUrl, parseRss, sha256, extractJson, json } from '../_lib/intel.js';
+import { FEEDS, SECTORS, PARTIES, SENTIMENTS, parseRss, sha256, extractJson, json } from '../_lib/intel.js';
 
 const COOLDOWN_SECONDS = 60;      // protects the AI/news quota from button-mashing
-const MAX_CLASSIFY_PER_PULL = 60; // keeps one request inside the platform's subrequest limits
+const MAX_CLASSIFY_PER_PULL = 72; // 6 AI calls per pull; backlog is worked off over successive pulls
 const BATCH = 12;
 const TEXT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
@@ -49,13 +49,13 @@ export async function onRequestPost({ env }) {
         .bind(String(now)).run();
 
     // 1. Fetch every feed in parallel; one failing feed must not fail the pull.
-    const fetched = await Promise.allSettled(QUERIES.map(async (q) => {
-        const res = await fetch(rssUrl(q.q), { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MalaysiaIntel/1.0)' } });
+    const fetched = await Promise.allSettled(FEEDS.map(async (f) => {
+        const res = await fetch(f.url, { redirect: 'follow', headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MalaysiaIntel/1.0)' } });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return parseRss(await res.text(), 10).map((it) => ({ ...it, query: q }));
+        return parseRss(await res.text(), 50, f.name).map((it) => ({ ...it, feed: f.url }));
     }));
-    const feedErrors = fetched.filter((r) => r.status === 'rejected').length;
-    const feedErrorSamples = [...new Set(fetched.filter((r) => r.status === 'rejected').map((r) => String(r.reason && r.reason.message)))].slice(0, 3);
+    const failed = fetched.filter((r) => r.status === 'rejected');
+    const feedErrorSamples = [...new Set(failed.map((r) => String(r.reason && r.reason.message)))].slice(0, 3);
     const articles = fetched.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
 
     // 2. De-duplicate within this pull and against what is already stored.
@@ -71,42 +71,43 @@ export async function onRequestPost({ env }) {
         const { results } = await env.DB.prepare(`SELECT id FROM items WHERE id IN (${chunk.map(() => '?').join(',')})`).bind(...chunk).all();
         results.forEach((r) => known.add(r.id));
     }
-    const fresh = [...unique.values()].filter((a) => !known.has(a.id)).sort((a, b) => b.publishedAt - a.publishedAt);
+    const fresh = [...unique.values()].filter((a) => !known.has(a.id));
 
-    // 3. Tag the newest items with AI; the rest are stored with the search's own hints.
-    const toClassify = fresh.slice(0, MAX_CLASSIFY_PER_PULL);
-    let aiFailures = 0;
-    for (let i = 0; i < toClassify.length; i += BATCH) {
-        const batch = toClassify.slice(i, i + BATCH);
+    // 3. Store every new article untagged first, so nothing is lost if tagging is slow or fails.
+    if (fresh.length) {
+        const stmt = env.DB.prepare(`INSERT OR IGNORE INTO items
+            (id, title, url, source, published_at, fetched_at, query, classified) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`);
+        for (let i = 0; i < fresh.length; i += 50) {
+            await env.DB.batch(fresh.slice(i, i + 50).map((a) => stmt.bind(a.id, a.title, a.url, a.source, a.publishedAt, now, a.feed)));
+        }
+    }
+
+    // 4. Tag the newest untagged articles (new ones plus any backlog) with AI.
+    const { results: pending } = await env.DB.prepare(
+        'SELECT id, title FROM items WHERE classified = 0 ORDER BY published_at DESC LIMIT ?').bind(MAX_CLASSIFY_PER_PULL).all();
+    let tagged = 0, aiFailures = 0;
+    const update = env.DB.prepare('UPDATE items SET sector = ?, party = ?, sentiment = ?, classified = 1 WHERE id = ?');
+    for (let i = 0; i < pending.length; i += BATCH) {
+        const batch = pending.slice(i, i + BATCH);
         try {
             const tags = await classify(env, batch);
-            batch.forEach((it, j) => Object.assign(it, tags[j], { classified: 1 }));
+            await env.DB.batch(batch.map((it, j) => update.bind(tags[j].sector, tags[j].party, tags[j].sentiment, it.id)));
+            tagged += batch.length;
         } catch (e) {
             aiFailures++;
             console.error('classify failed', e && e.message);
         }
     }
-
-    // 4. Store everything (D1 batch = one round trip).
-    if (fresh.length) {
-        const stmt = env.DB.prepare(`INSERT OR IGNORE INTO items
-            (id, title, url, source, published_at, fetched_at, query, sector, party, sentiment, classified)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-        for (let i = 0; i < fresh.length; i += 50) {
-            await env.DB.batch(fresh.slice(i, i + 50).map((a) => stmt.bind(
-                a.id, a.title, a.url, a.source, a.publishedAt, now, a.query.q,
-                a.sector || a.query.sector, a.party || a.query.party || null, a.sentiment || null, a.classified || 0,
-            )));
-        }
-    }
+    const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM items WHERE classified = 0').first();
 
     return json({
         ok: true,
-        fetchedFeeds: QUERIES.length - feedErrors,
-        failedFeeds: feedErrors,
+        fetchedFeeds: FEEDS.length - failed.length,
+        failedFeeds: failed.length,
         feedErrorSamples,
         newItems: fresh.length,
-        classified: toClassify.filter((a) => a.classified).length,
+        tagged,
+        untaggedRemaining: left.n,
         aiFailures,
     });
 }
