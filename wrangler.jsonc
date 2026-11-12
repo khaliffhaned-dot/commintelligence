@@ -1,0 +1,7 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "commet",
+  "compatibility_date": "2026-11-13",
+  "pages_build_output_dir": "./dist",
+  "ai": { "binding": "AI" }
+}
