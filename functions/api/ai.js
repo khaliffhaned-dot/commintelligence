@@ -1,5 +1,5 @@
 const DEFAULT_BASE_URL = 'https://tokenhub-intl.tencentcloudmaas.com/v1';
-const DEFAULT_MODEL = 'hy3-preview';
+const DEFAULT_MODEL = 'hy3';
 
 const json = (body, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
