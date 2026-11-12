@@ -1,6 +1,4 @@
-const HUNYUAN_CHAT_URL = 'https://hunyuan.cloud.tencent.com/openai/v1/chat/completions';
-const TEXT_MODEL = 'hunyuan-turbo';
-const VISION_MODEL = 'hunyuan-vision';
+const DEFAULT_BASE_URL = 'https://tokenhub-intl.tencentcloudmaas.com/v1';const DEFAULT_MODEL = 'hy3-preview';
 
 const json = (body, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -40,11 +38,11 @@ export async function onRequestPost({ request, env }) {
 
     let response;
     try {
-        response = await fetch(HUNYUAN_CHAT_URL, {
+        response = await fetch(`${(env.HUNYUAN_BASE_URL || DEFAULT_BASE_URL).replace(//$/, '')}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.HUNYUAN_API_KEY}` },
             body: JSON.stringify({
-                model: isVision ? VISION_MODEL : TEXT_MODEL,
+                model: (isVision ? env.HUNYUAN_VISION_MODEL : env.HUNYUAN_TEXT_MODEL) || DEFAULT_MODEL,
                 messages: [{ role: 'user', content }],
                 response_format: { type: 'json_object' },
             }),
@@ -53,7 +51,8 @@ export async function onRequestPost({ request, env }) {
         return json({ error: `Failed to reach Hunyuan API: ${e.message}` }, 502);
     }
     if (!response.ok) {
-        return json({ error: `Hunyuan API error (${response.status}): ${await response.text()}` }, 502);
+        console.error('Hunyuan error', response.status, await response.text());
+        return json({ error: `Hunyuan API error (HTTP ${response.status}). Check HUNYUAN_API_KEY, HUNYUAN_BASE_URL and the model name.` }, 502);
     }
 
     const data = await response.json();
