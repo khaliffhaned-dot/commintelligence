@@ -8,6 +8,15 @@ export const SECTORS = [
 ];
 export const PARTIES = ['BN', 'PH', 'PN', 'GPS', 'GRS', 'Other', 'None'];
 export const SENTIMENTS = ['Positive', 'Neutral', 'Negative'];
+// Barcelona Principle 2: the stakeholder audience a story chiefly concerns or addresses.
+export const AUDIENCES = ['Government & Regulators', 'Business & Industry', 'Investors & Markets', 'Consumers & Public', 'Civil Society & NGOs', 'Workforce & Unions', 'General public interest'];
+export const METRICS = {
+    volume: 'Coverage volume (articles)',
+    positive_share: 'Positive share of coverage (%)',
+    negative_share: 'Negative share of coverage (%)',
+    net_sentiment: 'Net sentiment (-100 to +100)',
+    share_of_voice: 'Share of voice (%)',
+};
 
 // Direct outlet feeds (Google News RSS returns HTTP 503 to Cloudflare's shared IPs). Sector/party are AI-tagged.
 export const FEEDS = [

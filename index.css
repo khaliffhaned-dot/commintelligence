@@ -955,3 +955,7 @@ body.dark .sub-nav-item.active { background-color: rgba(229, 62, 62, 0.15); }
     .client-switcher__info, .client-switcher__arrow { display: none; }
     .nusapulse-grid { grid-template-columns: 1fr; }
 }
+/* Measure: tables */
+.measure-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.measure-table th { text-align: left; padding: 0.6rem 0.75rem; border-bottom: 2px solid var(--border-color); color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
+.measure-table td { padding: 0.75rem; border-bottom: 1px solid var(--border-color); vertical-align: top; }

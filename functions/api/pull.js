@@ -1,4 +1,4 @@
-import { FEEDS, SECTORS, PARTIES, SENTIMENTS, parseRss, sha256, extractJson, json } from '../_lib/intel.js';
+import { FEEDS, SECTORS, PARTIES, SENTIMENTS, AUDIENCES, parseRss, sha256, extractJson, json } from '../_lib/intel.js';
 
 const COOLDOWN_SECONDS = 60;      // protects the AI/news quota from button-mashing
 const MAX_CLASSIFY_PER_PULL = 72; // 6 AI calls per pull; backlog is worked off over successive pulls
@@ -12,9 +12,10 @@ For each, return:
 - "sector": one of ${JSON.stringify(SECTORS)}
 - "party": the Malaysian political coalition the story is mainly about, one of ${JSON.stringify(PARTIES)} (BN, PH, PN, GPS, GRS, Other = another political party/figure, None = not political)
 - "sentiment": tone toward the story's main subject, one of ${JSON.stringify(SENTIMENTS)}
+- "audience": the stakeholder audience the story chiefly concerns, one of ${JSON.stringify(AUDIENCES)}
 Headlines:
 ${list}
-Return only JSON: {"results":[{"i":0,"sector":"...","party":"...","sentiment":"..."}]}`;
+Return only JSON: {"results":[{"i":0,"sector":"...","party":"...","sentiment":"...","audience":"..."}]}`;
     const out = await env.AI.run(env.AI_TEXT_MODEL || TEXT_MODEL, {
         messages: [
             { role: 'system', content: 'You are a precise media analyst for Malaysia. Reply with one valid JSON object only.' },
@@ -32,6 +33,7 @@ Return only JSON: {"results":[{"i":0,"sector":"...","party":"...","sentiment":".
             sector: SECTORS.includes(r.sector) ? r.sector : null,
             party: PARTIES.includes(r.party) ? r.party : null,
             sentiment: SENTIMENTS.includes(r.sentiment) ? r.sentiment : null,
+            audience: AUDIENCES.includes(r.audience) ? r.audience : null,
         };
     });
 }
@@ -84,21 +86,21 @@ export async function onRequestPost({ env }) {
 
     // 4. Tag the newest untagged articles (new ones plus any backlog) with AI.
     const { results: pending } = await env.DB.prepare(
-        'SELECT id, title FROM items WHERE classified = 0 ORDER BY published_at DESC LIMIT ?').bind(MAX_CLASSIFY_PER_PULL).all();
+        'SELECT id, title FROM items WHERE classified = 0 OR audience IS NULL ORDER BY published_at DESC LIMIT ?').bind(MAX_CLASSIFY_PER_PULL).all();
     let tagged = 0, aiFailures = 0;
-    const update = env.DB.prepare('UPDATE items SET sector = ?, party = ?, sentiment = ?, classified = 1 WHERE id = ?');
+    const update = env.DB.prepare('UPDATE items SET sector = ?, party = ?, sentiment = ?, audience = ?, classified = 1 WHERE id = ?');
     for (let i = 0; i < pending.length; i += BATCH) {
         const batch = pending.slice(i, i + BATCH);
         try {
             const tags = await classify(env, batch);
-            await env.DB.batch(batch.map((it, j) => update.bind(tags[j].sector, tags[j].party, tags[j].sentiment, it.id)));
+            await env.DB.batch(batch.map((it, j) => update.bind(tags[j].sector, tags[j].party, tags[j].sentiment, tags[j].audience, it.id)));
             tagged += batch.length;
         } catch (e) {
             aiFailures++;
             console.error('classify failed', e && e.message);
         }
     }
-    const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM items WHERE classified = 0').first();
+    const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM items WHERE classified = 0 OR audience IS NULL').first();
 
     return json({
         ok: true,

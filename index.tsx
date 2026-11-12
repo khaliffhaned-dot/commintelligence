@@ -970,7 +970,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return `${Math.floor(diff / 86400)} d ago`;
         }
 
-        const feedFilters = { sector: '', party: '', sentiment: '' };
+        const feedFilters = { sector: '', party: '', sentiment: '', audience: '' };
 
         /** Asks the backend to fetch + tag new articles. Returns the API response (or null on failure). */
         async function pullLatestNews(): Promise<any> {
@@ -1007,7 +1007,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <p class="mention-card__content"><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(it.title)}</a></p>
                             <div class="mention-card__footer">
                                 ${it.sentiment ? `<div class="sentiment-tag sentiment-tag--${escapeHtml(it.sentiment.toLowerCase())}">${escapeHtml(it.sentiment)}</div>` : '<div class="sentiment-tag">Untagged</div>'}
-                                <div class="mention-card__author">${escapeHtml([it.sector, it.party && it.party !== 'None' ? it.party : ''].filter(Boolean).join(' · '))}</div>
+                                <div class="mention-card__author">${escapeHtml([it.sector, it.party && it.party !== 'None' ? it.party : '', it.audience].filter(Boolean).join(' · '))}</div>
                             </div>
                         </div>`).join('');
                 }
@@ -1057,11 +1057,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${Object.keys(INTEL_PARTIES).map(k => `<option value="${k}">${INTEL_PARTIES[k]}</option>`).join('')}
                     </select>
                     <select id="feed-filter-sentiment" class="form-select" style="max-width:200px;">${opt(['Positive', 'Neutral', 'Negative'], 'Any sentiment')}</select>
+                    <select id="feed-filter-audience" class="form-select" style="max-width:240px;">${opt(INTEL_AUDIENCES, 'All stakeholder audiences')}</select>
                 </div>
                 <div class="signal-feed-column" id="intel-feed-list"></div>
             `;
 
-            (['sector', 'party', 'sentiment'] as const).forEach(k => {
+            (['sector', 'party', 'sentiment', 'audience'] as const).forEach(k => {
                 const el = document.getElementById(`feed-filter-${k}`) as HTMLSelectElement;
                 el.value = feedFilters[k];
                 el.addEventListener('change', () => { feedFilters[k] = el.value; loadFeed(); });
@@ -2881,6 +2882,197 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+        // --- MEASURE: AMEC Barcelona Principles 4.0 ---
+        const INTEL_AUDIENCES = ['Government & Regulators', 'Business & Industry', 'Investors & Markets', 'Consumers & Public',
+            'Civil Society & NGOs', 'Workforce & Unions', 'General public interest'];
+        const MEASURE_METRICS: { [key: string]: string } = {
+            volume: 'Coverage volume (articles)',
+            positive_share: 'Positive share of coverage (%)',
+            negative_share: 'Negative share of coverage (%)',
+            net_sentiment: 'Net sentiment (-100 to +100)',
+            share_of_voice: 'Share of voice (%)',
+        };
+        const statusBadge = (s: string) => `<span class="trend-badge trend-badge--${s === 'Met' ? 'rising' : s === 'Behind' ? 'declining' : 'stable'}">${escapeHtml(s)}</span>`;
+        const optionList = (items: string[], blank: string) => `<option value="">${blank}</option>` + items.map(i => `<option value="${escapeHtml(i)}">${escapeHtml(i)}</option>`).join('');
+        let measureDays = 30;
+
+        async function renderMeasureObjectivesView() {
+            const container = document.getElementById('measure-objectives-view');
+            if (!container) return;
+            container.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Loading measurement report…</p></div>`;
+            let report: any;
+            try {
+                const res = await fetch(`/api/report?days=${measureDays}`);
+                report = await res.json();
+                if (report.error) throw new Error(report.error);
+            } catch (e: any) {
+                container.innerHTML = `<div class="empty-state"><p class="error-message">Could not load the report: ${escapeHtml(e.message)}</p></div>`;
+                return;
+            }
+
+            const scopeText = (o: any) => [o.party, o.sector, o.audience].filter(Boolean).join(' · ') || 'All coverage';
+            const rowsHtml = report.impact.objectives.map((o: any) => `
+                <tr>
+                    <td><strong>${escapeHtml(o.name)}</strong><div class="text-secondary">${escapeHtml(scopeText(o))} · last ${o.days} days</div></td>
+                    <td>${escapeHtml(MEASURE_METRICS[o.metric] || o.metric)}</td>
+                    <td>${o.comparator === 'atleast' ? '≥' : '≤'} ${o.target}</td>
+                    <td>${o.value === null ? '—' : o.value} <span class="text-secondary">(n=${o.sampleSize})</span></td>
+                    <td>${statusBadge(o.status)}</td>
+                    <td><button class="btn btn--secondary" data-delete-objective="${escapeHtml(o.id)}">Delete</button></td>
+                </tr>`).join('') || `<tr><td colspan="6" class="text-secondary">No objectives yet. Add one above: a clear, measurable objective is the starting point of the Barcelona Principles.</td></tr>`;
+
+            const out = report.outputs, oc = report.outcomes, mix = oc.sentimentMix;
+            const sourcesHtml = out.bySource.map((s: any) => `<li>${escapeHtml(s.source)} <span class="text-secondary">(${s.n})</span></li>`).join('');
+            const audienceHtml = oc.byAudience.map((a: any) => `<tr><td>${escapeHtml(a.audience)}</td><td>${a.articles}</td><td>${a.netSentiment === null ? '—' : (a.netSentiment > 0 ? '+' : '') + a.netSentiment}</td></tr>`).join('')
+                || `<tr><td colspan="3" class="text-secondary">No audience-tagged coverage yet. Pull the feed to tag more articles.</td></tr>`;
+
+            container.innerHTML = `
+                <div class="view-header">
+                    <div>
+                        <h2>Measure: Objectives &amp; Impact</h2>
+                        <p class="text-secondary">Aligned to AMEC Barcelona Principles V4.0. Measured on real coverage over the last ${report.days} days, with no advertising value equivalents (AVEs).</p>
+                    </div>
+                    <div style="display:flex; gap:0.75rem;">
+                        <select id="measure-days" class="form-select">
+                            ${[7, 30, 90].map(d => `<option value="${d}" ${d === report.days ? 'selected' : ''}>Last ${d} days</option>`).join('')}
+                        </select>
+                        <button id="export-measure-pdf-button" class="btn btn--secondary">Export as PDF</button>
+                    </div>
+                </div>
+                <div id="measure-export-content">
+                    <div class="card" style="margin-bottom:1.5rem;">
+                        <div class="card__header"><h3>1 · Set a measurable objective</h3></div>
+                        <div class="card__body">
+                            <div class="form-group"><label>Objective name</label><input id="obj-name" class="form-input" maxlength="120" placeholder="e.g. Keep PH net sentiment above 0 among investors" /></div>
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:0.75rem;">
+                                <div class="form-group"><label>Metric</label><select id="obj-metric" class="form-select">${Object.keys(MEASURE_METRICS).map(k => `<option value="${k}">${MEASURE_METRICS[k]}</option>`).join('')}</select></div>
+                                <div class="form-group"><label>Goal</label><select id="obj-comparator" class="form-select"><option value="atleast">At least</option><option value="atmost">At most</option></select></div>
+                                <div class="form-group"><label>Target</label><input id="obj-target" type="number" class="form-input" value="50" /></div>
+                                <div class="form-group"><label>Window (days)</label><input id="obj-days" type="number" min="1" max="90" class="form-input" value="30" /></div>
+                                <div class="form-group"><label>Party (optional)</label><select id="obj-party" class="form-select">${optionList(Object.keys(INTEL_PARTIES), 'Any')}</select></div>
+                                <div class="form-group"><label>Sector (optional)</label><select id="obj-sector" class="form-select">${optionList(INTEL_SECTORS, 'Any')}</select></div>
+                                <div class="form-group"><label>Stakeholder audience (optional)</label><select id="obj-audience" class="form-select">${optionList(INTEL_AUDIENCES, 'Any')}</select></div>
+                            </div>
+                            <button id="obj-add" class="btn btn--primary" style="margin-top:0.75rem;">Add objective</button>
+                            <span id="obj-msg" class="text-secondary" style="margin-left:0.75rem;"></span>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-bottom:1.5rem;">
+                        <div class="card__header"><h3>Impact · objectives (${report.impact.met} of ${report.impact.total} met)</h3></div>
+                        <div class="card__body" style="overflow-x:auto;">
+                            <table class="measure-table"><thead><tr><th>Objective</th><th>Metric</th><th>Target</th><th>Measured</th><th>Status</th><th></th></tr></thead><tbody>${rowsHtml}</tbody></table>
+                        </div>
+                    </div>
+
+                    <div class="insights-grid">
+                        <div class="card">
+                            <div class="card__header"><h3>Outputs</h3></div>
+                            <div class="card__body">
+                                <div class="propagation-metric"><span class="propagation-metric__label">Articles collected</span><span class="propagation-metric__value">${out.articles}</span></div>
+                                <div class="propagation-metric"><span class="propagation-metric__label">Distinct sources</span><span class="propagation-metric__value">${out.sources}</span></div>
+                                <p class="text-secondary" style="margin:0.5rem 0;">Channels: ${escapeHtml(out.channels.join(', '))}</p>
+                                <div class="ai-report-section"><h4>Top sources</h4><ul>${sourcesHtml || '<li>None yet</li>'}</ul></div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card__header"><h3>Outcomes · sentiment of coverage</h3></div>
+                            <div class="card__body">
+                                <div class="propagation-metric"><span class="propagation-metric__label">Net sentiment</span><span class="propagation-metric__value">${oc.netSentiment === null ? '—' : (oc.netSentiment > 0 ? '+' : '') + oc.netSentiment}</span></div>
+                                <div id="measure-sentiment-chart"></div>
+                            </div>
+                        </div>
+                        <div class="card" style="grid-column:1 / -1;">
+                            <div class="card__header"><h3>Outcomes · by stakeholder audience</h3></div>
+                            <div class="card__body" style="overflow-x:auto;">
+                                <table class="measure-table"><thead><tr><th>Audience</th><th>Articles</th><th>Net sentiment</th></tr></thead><tbody>${audienceHtml}</tbody></table>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-secondary" style="margin-top:1rem;">Both quantitative counts and qualitative context (the linked headlines in the Live Feed) should be read together. Sentiment and audience labels are AI-assigned from headlines; see Methodology &amp; Ethics for limits.</p>
+                </div>`;
+
+            document.getElementById('measure-days')?.addEventListener('change', (e) => { measureDays = Number((e.target as HTMLSelectElement).value); renderMeasureObjectivesView(); });
+            document.getElementById('export-measure-pdf-button')?.addEventListener('click', () => handleGenericPdfExport('measure-export-content', 'export-measure-pdf-button', 'Measurement Report (Barcelona Principles 4.0)'));
+            document.querySelectorAll('[data-delete-objective]').forEach(btn => btn.addEventListener('click', async () => {
+                await fetch(`/api/objectives?id=${encodeURIComponent((btn as HTMLElement).dataset.deleteObjective || '')}`, { method: 'DELETE' });
+                renderMeasureObjectivesView();
+            }));
+            document.getElementById('obj-add')?.addEventListener('click', async () => {
+                const v = (id: string) => (document.getElementById(id) as HTMLInputElement).value;
+                const msg = document.getElementById('obj-msg')!;
+                const res = await fetch('/api/objectives', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: v('obj-name'), metric: v('obj-metric'), comparator: v('obj-comparator'), target: v('obj-target'),
+                        days: v('obj-days'), party: v('obj-party'), sector: v('obj-sector'), audience: v('obj-audience') }),
+                });
+                const data = await res.json();
+                if (data.error) { msg.textContent = data.error; return; }
+                renderMeasureObjectivesView();
+            });
+
+            if (appState.charts['measureSentiment']) appState.charts['measureSentiment'].destroy();
+            const total = mix.Positive + mix.Neutral + mix.Negative;
+            const chartEl = document.querySelector('#measure-sentiment-chart');
+            if (chartEl && total) {
+                appState.charts['measureSentiment'] = new ApexCharts(chartEl, {
+                    series: [mix.Positive, mix.Neutral, mix.Negative], labels: ['Positive', 'Neutral', 'Negative'],
+                    chart: { type: 'donut', height: 260 }, colors: ['var(--success)', 'var(--warning)', 'var(--danger)'],
+                    legend: { position: 'bottom', labels: { colors: 'var(--text-secondary)' } },
+                    tooltip: { theme: document.body.classList.contains('dark') ? 'dark' : 'light' },
+                });
+                appState.charts['measureSentiment'].render();
+            } else if (chartEl) {
+                chartEl.innerHTML = '<p class="text-secondary">No tagged coverage yet. Pull the feed first.</p>';
+            }
+        }
+
+        async function renderMeasureMethodologyView() {
+            const container = document.getElementById('measure-methodology-view');
+            if (!container) return;
+            let q: any = null;
+            try { q = (await (await fetch('/api/report?days=90')).json()).dataQuality; } catch { /* shown as unavailable */ }
+            const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : '—');
+            const principles = [
+                ['1', 'Set clear, measurable objectives', 'Measure → Objectives & Impact: objectives with a metric, target, scope and window, tracked against real coverage.', 'Supported'],
+                ['2', 'Define and understand stakeholder audiences', 'Each article is tagged with the stakeholder audience it chiefly concerns, filterable in the Live Feed and reported in Outcomes.', 'Supported (AI-tagged)'],
+                ['3', 'Measure all relevant channels', 'Online news only (Free Malaysia Today, New Straits Times, Malaysiakini). Social, broadcast and forum channels are not yet covered, so results describe news coverage only.', 'Partial'],
+                ['4', 'Use qualitative and quantitative analysis', 'Counts, shares and sentiment (quantitative) sit alongside linked source headlines (qualitative). The qualitative read still needs a human analyst.', 'Partial'],
+                ['5', 'Do not use AVEs; judge by outcome and impact', 'The platform computes no advertising value equivalents. Impact is judged against your objectives, not a notional media price.', 'Supported'],
+                ['6', 'Report outputs, outcomes and impact', 'Measure → Objectives & Impact reports all three, exportable as PDF.', 'Supported'],
+                ['7', 'Ethics, governance and transparency', 'This page: sources, method, AI use and known limits are disclosed. Not yet in place: user accounts, access control and audit logs.', 'Partial'],
+            ];
+            const rows = principles.map(p => `<tr><td>${p[0]}</td><td><strong>${p[1]}</strong><div class="text-secondary">${p[2]}</div></td><td>${statusBadge(p[3] === 'Supported' ? 'Met' : p[3] === 'Partial' ? 'On track' : 'Behind').replace(/>[^<]*</, `>${escapeHtml(p[3])}<`)}</td></tr>`).join('');
+            container.innerHTML = `
+                <div class="view-header"><div>
+                    <h2>Measure: Methodology &amp; Ethics</h2>
+                    <p class="text-secondary">How this platform maps to the AMEC Barcelona Principles V4.0 (2025), and what its data can and cannot tell you.</p>
+                </div></div>
+                <div class="card" style="margin-bottom:1.5rem;"><div class="card__header"><h3>Barcelona Principles V4.0: coverage in this platform</h3></div>
+                    <div class="card__body" style="overflow-x:auto;"><table class="measure-table"><thead><tr><th>#</th><th>Principle and how it is applied</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+                <div class="insights-grid">
+                    <div class="card"><div class="card__header"><h3>Data and method</h3></div><div class="card__body"><div class="ai-report-section"><ul>
+                        <li><strong>Sources:</strong> RSS feeds from Free Malaysia Today, New Straits Times and Malaysiakini. Each item links to the original article.</li>
+                        <li><strong>Pulling:</strong> on demand and while the Live Feed is open. There is no always-on collection yet, so gaps are possible.</li>
+                        <li><strong>AI tagging:</strong> a Cloudflare Workers AI model (Llama 3.3 70B) assigns sector, party, sentiment and audience from the headline only, not the full text.</li>
+                        <li><strong>De-duplication:</strong> articles are matched by URL; the same story from different outlets counts separately.</li>
+                    </ul></div></div></div>
+                    <div class="card"><div class="card__header"><h3>Data quality (last 90 days)</h3></div><div class="card__body">
+                        ${q ? `<div class="propagation-metric"><span class="propagation-metric__label">Articles stored</span><span class="propagation-metric__value">${q.total}</span></div>
+                        <div class="propagation-metric"><span class="propagation-metric__label">AI-tagged</span><span class="propagation-metric__value">${pct(q.tagged, q.total)}</span></div>
+                        <div class="propagation-metric"><span class="propagation-metric__label">With audience label</span><span class="propagation-metric__value">${pct(q.withAudience, q.total)}</span></div>` : '<p class="text-secondary">Unavailable right now.</p>'}
+                    </div></div>
+                    <div class="card" style="grid-column:1 / -1;"><div class="card__header"><h3>Limits to keep in mind</h3></div><div class="card__body"><div class="ai-report-section"><ul>
+                        <li>Tags are machine-generated from headlines and are sometimes wrong. Spot-check before using a number in a client report.</li>
+                        <li>Coverage is news only, so this is not public opinion and not polling, and it says nothing about social media.</li>
+                        <li>Sentiment describes the tone of an article, not the opinion of a stakeholder audience.</li>
+                        <li>Small samples (low n) swing wildly; the sample size is shown beside every measured value.</li>
+                        <li><strong>Why no AVE:</strong> the Barcelona Principles say invalid measures such as advertising value equivalents should not be used. AVEs convert coverage into a notional ad price and say nothing about outcome or impact.</li>
+                    </ul></div></div></div>
+                </div>
+                <p class="text-secondary" style="margin-top:1rem;">Reference: AMEC Barcelona Principles V4.0, amecorg.com. Paraphrased; read the original for the full text.</p>`;
+        }
+
         // --- UI Rendering & App Initialization ---
         const viewRenderers: { [key: string]: () => void } = {
             'nusapulse-map-view': renderNusaPulseMapView,
@@ -2902,6 +3094,8 @@ document.addEventListener('DOMContentLoaded', () => {
             'amplify-campaign-view': renderAmplifyCampaignView,
             'duediligence-vetting-view': renderDueDiligenceView,
             'nusapulse-party-tracker-view': renderNusaPulsePartyTrackerView,
+            'measure-objectives-view': renderMeasureObjectivesView,
+            'measure-methodology-view': renderMeasureMethodologyView,
         };
 
         function getActiveView(): string {
@@ -3141,6 +3335,19 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <li><a class="sub-nav-item" data-view="duediligence-vetting-view">Entity Vetting</a></li>
                             </ul>
                         </div>
+                        <div class="nav-pillar">
+                            <div class="nav-item" data-parent="measure">
+                                <div class="nav-item__content">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+                                    <span class="nav-item__text">Measure</span>
+                                </div>
+                                <svg class="nav-item__arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </div>
+                             <ul class="sub-nav-list">
+                                <li><a class="sub-nav-item" data-view="measure-objectives-view">Objectives &amp; Impact</a></li>
+                                <li><a class="sub-nav-item" data-view="measure-methodology-view">Methodology &amp; Ethics</a></li>
+                            </ul>
+                        </div>
                     </nav>
                 </aside>
                 <div class="main-wrapper">
@@ -3179,6 +3386,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div id="aegis-scenario-view" class="view view-hidden"></div>
                         <div id="amplify-campaign-view" class="view view-hidden"></div>
                         <div id="duediligence-vetting-view" class="view view-hidden"></div>
+                        <div id="measure-objectives-view" class="view view-hidden"></div>
+                        <div id="measure-methodology-view" class="view view-hidden"></div>
                         <div id="nusapulse-party-tracker-view" class="view view-hidden"></div>
                     </main>
                 </div>
