@@ -3084,6 +3084,163 @@ document.addEventListener('DOMContentLoaded', () => {
                 <p class="text-secondary" style="margin-top:1rem;">Reference: AMEC Barcelona Principles V4.0, amecorg.com. Paraphrased; read the original for the full text.</p>`;
         }
 
+        // --- DASHBOARD: one-screen Malaysia overview built from real stored coverage ---
+        const DASH_NS = (pos: number, neg: number, total: number) => (total ? Math.round(((pos - neg) / total) * 100) : null);
+
+        async function renderDashboardView() {
+            const container = document.getElementById('dashboard-overview-view');
+            if (!container) return;
+            container.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Loading dashboard…</p></div>`;
+            let d: any;
+            try {
+                const res = await apiFetch('/api/overview');
+                d = await res.json();
+                if (d.error) throw new Error(d.error);
+            } catch (e: any) {
+                container.innerHTML = `<div class="empty-state"><p class="error-message">Could not load the dashboard: ${escapeHtml(e.message)}</p></div>`;
+                return;
+            }
+
+            const mix = d.sentimentMix;
+            const tagged = mix.Positive + mix.Neutral + mix.Negative;
+            const net = DASH_NS(mix.Positive, mix.Negative, tagged);
+            const delta = d.articlesPrev24h ? Math.round(((d.articles24h - d.articlesPrev24h) / d.articlesPrev24h) * 100) : null;
+
+            // Party roll-up
+            const partyRows = ['BN', 'PH', 'PN', 'GPS', 'GRS'].map(code => {
+                const rows = d.parties.filter((r: any) => r.party === code);
+                const g = (s: string) => rows.filter((r: any) => r.sentiment === s).reduce((a: number, r: any) => a + r.n, 0);
+                const pos = g('Positive'), neu = g('Neutral'), neg = g('Negative');
+                return { code, pos, neu, neg, total: pos + neu + neg };
+            });
+            const topParty = [...partyRows].sort((a, b) => b.total - a.total)[0];
+
+            // Sector roll-up (top 8 by volume)
+            const sectorMap: { [k: string]: { pos: number; neu: number; neg: number } } = {};
+            d.sectors.forEach((r: any) => {
+                const s = (sectorMap[r.sector] = sectorMap[r.sector] || { pos: 0, neu: 0, neg: 0 });
+                if (r.sentiment === 'Positive') s.pos += r.n; else if (r.sentiment === 'Negative') s.neg += r.n; else s.neu += r.n;
+            });
+            const sectorRows = Object.keys(sectorMap).map(name => ({ name, ...sectorMap[name], total: sectorMap[name].pos + sectorMap[name].neu + sectorMap[name].neg }))
+                .sort((a, b) => b.total - a.total).slice(0, 8);
+
+            const kpi = (label: string, value: string, sub: string, tone = '') =>
+                `<div class="card kpi"><div class="kpi__label">${label}</div><div class="kpi__value ${tone}">${value}</div><div class="kpi__sub">${sub}</div></div>`;
+            const netTone = net === null ? '' : net > 5 ? 'kpi__value--good' : net < -5 ? 'kpi__value--bad' : '';
+            const stale = !d.lastPull || (Date.now() / 1000 - d.lastPull) > 3600;
+
+            const headlines = d.latest.map((i: any) => `
+                <li class="dash-headline">
+                    <a href="${escapeHtml(i.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(i.title)}</a>
+                    <div class="text-secondary">${escapeHtml(i.source)} · ${timeAgo(i.publishedAt)}${i.sector ? ' · ' + escapeHtml(i.sector) : ''}${i.sentiment ? ` · <span class="sentiment-tag sentiment-tag--${escapeHtml(i.sentiment.toLowerCase())}">${escapeHtml(i.sentiment)}</span>` : ''}</div>
+                </li>`).join('');
+
+            container.innerHTML = `
+                <div class="view-header">
+                    <div>
+                        <h2>Malaysia Intelligence Dashboard</h2>
+                        <p class="text-secondary">${authState.org ? escapeHtml(authState.org.name) + ' · ' : ''}Real news coverage, last 7 days${d.lastPull ? ` · updated ${timeAgo(d.lastPull)}` : ''}${stale ? ' <span class="trend-badge trend-badge--stable">Data may be stale</span>' : ''}</p>
+                    </div>
+                    <button id="dash-pull-button" class="btn btn--primary">Pull latest</button>
+                </div>
+
+                ${d.quality.total ? '' : `<div class="card" style="margin-bottom:1.5rem;"><div class="card__body"><strong>No coverage collected yet.</strong> Click <em>Pull latest</em> to fetch Malaysian news.</div></div>`}
+
+                <div class="kpi-grid">
+                    ${kpi('Articles · last 24h', String(d.articles24h), delta === null ? 'no prior day to compare' : `${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)}% vs previous 24h`)}
+                    ${kpi('Net sentiment · 7 days', net === null ? '—' : (net > 0 ? '+' : '') + net, `${tagged} tagged articles`, netTone)}
+                    ${kpi('Most covered party', topParty && topParty.total ? escapeHtml(topParty.code) : '—', topParty && topParty.total ? `${topParty.total} articles` : 'no political coverage yet')}
+                    ${kpi('Objectives met', d.objectives.total ? `${d.objectives.met}/${d.objectives.total}` : '—', d.objectives.total ? (d.objectives.behind ? `${d.objectives.behind} behind target` : 'none behind target') : 'set one under Measure')}
+                </div>
+
+                <div class="dash-grid">
+                    <div class="card dash-wide"><div class="card__header"><h3>Coverage &amp; net sentiment by day</h3></div><div class="card__body"><div id="dash-trend-chart"></div></div></div>
+                    <div class="card"><div class="card__header"><h3>Sentiment mix</h3></div><div class="card__body"><div id="dash-mix-chart"></div></div></div>
+                    <div class="card dash-wide"><div class="card__header"><h3>Sectors · most covered</h3></div><div class="card__body"><div id="dash-sector-chart"></div></div></div>
+                    <div class="card"><div class="card__header"><h3>Party coverage</h3></div><div class="card__body"><div id="dash-party-chart"></div></div></div>
+                    <div class="card dash-wide"><div class="card__header"><h3>Latest headlines</h3></div><div class="card__body"><ul class="dash-list">${headlines || '<li class="text-secondary">Nothing yet.</li>'}</ul></div></div>
+                    <div class="card"><div class="card__header"><h3>Coverage &amp; trust</h3></div><div class="card__body">
+                        <ul class="dash-list">
+                            <li><strong>Channels:</strong> online news (6 feeds)</li>
+                            <li><strong>Social:</strong> not covered. A test of open networks (Bluesky, Mastodon) found no usable Malaysian volume.</li>
+                            <li><strong>AI-tagged:</strong> ${d.quality.total ? Math.round((d.quality.tagged / d.quality.total) * 100) : 0}% of articles</li>
+                            <li><strong>Top sources:</strong> ${d.sources.map((s: any) => `${escapeHtml(s.source)} (${s.n})`).join(', ') || '—'}</li>
+                        </ul>
+                        <p class="text-secondary" style="margin-top:0.75rem;">Tags are AI-assigned from headlines. See Measure → Methodology &amp; Ethics.</p>
+                    </div></div>
+                </div>`;
+
+            const pullBtn = document.getElementById('dash-pull-button') as HTMLButtonElement;
+            pullBtn.addEventListener('click', async () => {
+                pullBtn.disabled = true; pullBtn.textContent = 'Pulling…';
+                await pullLatestNews();
+                renderDashboardView();
+            });
+
+            const theme = document.body.classList.contains('dark') ? 'dark' : 'light';
+            const axisStyle = { labels: { style: { colors: 'var(--text-secondary)' } } };
+            const make = (key: string, sel: string, opts: any) => {
+                if (appState.charts[key]) appState.charts[key].destroy();
+                const el = document.querySelector(sel);
+                if (!el) return;
+                appState.charts[key] = new ApexCharts(el, { ...opts, tooltip: { theme }, grid: { borderColor: 'var(--border-color)' } });
+                appState.charts[key].render();
+            };
+            const emptyNote = (sel: string, text: string) => { const el = document.querySelector(sel); if (el) el.innerHTML = `<p class="text-secondary">${text}</p>`; };
+
+            // Trend: volume columns + net sentiment line
+            if (d.trend.length) {
+                make('dashTrend', '#dash-trend-chart', {
+                    series: [
+                        { name: 'Articles', type: 'column', data: d.trend.map((r: any) => r.n) },
+                        { name: 'Net sentiment', type: 'line', data: d.trend.map((r: any) => DASH_NS(r.pos, r.neg, r.n)) },
+                    ],
+                    chart: { type: 'line', height: 300, toolbar: { show: false } },
+                    stroke: { width: [0, 3], curve: 'smooth' }, markers: { size: [0, 4] }, dataLabels: { enabled: false },
+                    xaxis: { categories: d.trend.map((r: any) => r.day), ...axisStyle },
+                    yaxis: [{ title: { text: 'Articles' }, ...axisStyle }, { opposite: true, min: -100, max: 100, title: { text: 'Net sentiment' }, ...axisStyle }],
+                    colors: ['var(--primary)', 'var(--warning)'],
+                    legend: { position: 'top', horizontalAlign: 'right', labels: { colors: 'var(--text-secondary)' } },
+                });
+            } else emptyNote('#dash-trend-chart', 'No tagged coverage yet.');
+
+            if (tagged) {
+                make('dashMix', '#dash-mix-chart', {
+                    series: [mix.Positive, mix.Neutral, mix.Negative], labels: ['Positive', 'Neutral', 'Negative'],
+                    chart: { type: 'donut', height: 300 }, colors: ['var(--success)', 'var(--warning)', 'var(--danger)'],
+                    legend: { position: 'bottom', labels: { colors: 'var(--text-secondary)' } },
+                });
+            } else emptyNote('#dash-mix-chart', 'No tagged coverage yet.');
+
+            if (sectorRows.length) {
+                make('dashSector', '#dash-sector-chart', {
+                    series: [{ name: 'Positive', data: sectorRows.map(r => r.pos) }, { name: 'Neutral', data: sectorRows.map(r => r.neu) }, { name: 'Negative', data: sectorRows.map(r => r.neg) }],
+                    chart: { type: 'bar', height: Math.max(260, sectorRows.length * 38), stacked: true, toolbar: { show: false } },
+                    plotOptions: { bar: { horizontal: true, barHeight: '65%' } }, dataLabels: { enabled: false },
+                    xaxis: { categories: sectorRows.map(r => r.name), ...axisStyle }, yaxis: { labels: { style: { colors: 'var(--text-secondary)' }, maxWidth: 180 } },
+                    colors: ['var(--success)', 'var(--warning)', 'var(--danger)'], fill: { opacity: 1 },
+                    legend: { position: 'top', horizontalAlign: 'right', labels: { colors: 'var(--text-secondary)' } },
+                });
+            } else emptyNote('#dash-sector-chart', 'No sector data yet.');
+
+            if (partyRows.some(r => r.total)) {
+                make('dashParty', '#dash-party-chart', {
+                    series: [{ name: 'Positive', data: partyRows.map(r => r.pos) }, { name: 'Neutral', data: partyRows.map(r => r.neu) }, { name: 'Negative', data: partyRows.map(r => r.neg) }],
+                    chart: { type: 'bar', height: 300, stacked: true, toolbar: { show: false } },
+                    plotOptions: { bar: { columnWidth: '55%' } }, dataLabels: { enabled: false },
+                    xaxis: { categories: partyRows.map(r => r.code), ...axisStyle }, yaxis: axisStyle,
+                    colors: ['var(--success)', 'var(--warning)', 'var(--danger)'], fill: { opacity: 1 },
+                    legend: { position: 'top', labels: { colors: 'var(--text-secondary)' } },
+                });
+            } else emptyNote('#dash-party-chart', 'No political coverage tagged yet.');
+
+            // Keep the dashboard fresh: if data is stale and the page is open, trigger a (rate-limited) pull once.
+            if (stale && !(appState as any).dashAutoPulled) {
+                (appState as any).dashAutoPulled = true;
+                pullLatestNews().then(r => { if (r && r.ok && r.newItems) renderDashboardView(); });
+            }
+        }
+
         // --- ACCOUNTS: sign-in screen, session check, user menu ---
         function showAuthOverlay(onSuccess: () => void) {
             document.getElementById('auth-overlay')?.remove();
@@ -3166,6 +3323,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- UI Rendering & App Initialization ---
         const viewRenderers: { [key: string]: () => void } = {
+            'dashboard-overview-view': renderDashboardView,
             'nusapulse-map-view': renderNusaPulseMapView,
             'veritas-integrity-view': renderVeritasIntegrityView,
             'veritas-propagation-view': renderVeritasPropagationView,
@@ -3191,7 +3349,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function getActiveView(): string {
              const activeLink = document.querySelector('.sub-nav-item.active');
-             return activeLink ? activeLink.getAttribute('data-view') || 'nusapulse-map-view' : 'nusapulse-map-view';
+             return activeLink ? activeLink.getAttribute('data-view') || 'dashboard-overview-view' : 'dashboard-overview-view';
         }
 
         function switchView(viewId: string) {
@@ -3333,6 +3491,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <nav class="sidebar__nav">
                         <div class="nav-pillar">
+                            <div class="nav-item active-parent open" data-parent="dashboard">
+                                <div class="nav-item__content">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+                                    <span class="nav-item__text">Dashboard</span>
+                                </div>
+                                <svg class="nav-item__arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </div>
+                            <ul class="sub-nav-list open">
+                                <li><a class="sub-nav-item active" data-view="dashboard-overview-view">Overview</a></li>
+                            </ul>
+                        </div>
+                        <div class="nav-pillar">
                             <div class="nav-item" data-parent="signal">
                                 <div class="nav-item__content">
                                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12H2a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h2.5"/><path d="M15 13.1c.9-1.3 1.5-2.9 1.5-4.6 0-4.1-3.3-7.5-7.5-7.5S1.5 4.4 1.5 8.5c0 1.7.6 3.3 1.5 4.6L7 17v3.5a1.5 1.5 0 0 0 3 0V17l3.5-3.9Z"/><path d="M12.5 6.5A2.5 2.5 0 0 1 15 9"/><path d="M18.5 3.5A6.5 6.5 0 0 1 22 10"/></svg>
@@ -3362,15 +3532,15 @@ document.addEventListener('DOMContentLoaded', () => {
                             </ul>
                         </div>
                         <div class="nav-pillar">
-                             <a class="nav-item active-parent open" data-parent="nusapulse">
+                             <a class="nav-item" data-parent="nusapulse">
                                 <div class="nav-item__content">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
                                     <span class="nav-item__text">NusaPulse</span>
                                 </div>
                                  <svg class="nav-item__arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                             </a>
-                             <ul class="sub-nav-list open">
-                                <li><a class="sub-nav-item active" data-view="nusapulse-map-view">Regional Map</a></li>
+                             <ul class="sub-nav-list">
+                                <li><a class="sub-nav-item" data-view="nusapulse-map-view">Regional Map</a></li>
                                 <li><a class="sub-nav-item" data-view="nusapulse-insights-view">Industry Insights</a></li>
                                 <li><a class="sub-nav-item" data-view="nusapulse-party-tracker-view">Party Sentiment Tracker</a></li>
                             </ul>
@@ -3443,7 +3613,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </aside>
                 <div class="main-wrapper">
                     <header class="header">
-                        <h2 id="view-title">Regional Map</h2>
+                        <h2 id="view-title">Dashboard</h2>
                         <div class="header__actions">
                             <div id="user-menu-container" class="user-menu"></div>
                             <div id="client-switcher-container">
@@ -3460,7 +3630,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     </header>
                     <main class="main-content" id="main-content">
                         <!-- Views are rendered here -->
-                        <div id="nusapulse-map-view" class="view"></div>
+                        <div id="dashboard-overview-view" class="view"></div>
+                        <div id="nusapulse-map-view" class="view view-hidden"></div>
                         <div id="veritas-integrity-view" class="view view-hidden"></div>
                         <div id="veritas-propagation-view" class="view view-hidden"></div>
                         <div id="signal-feed-view" class="view view-hidden"></div>
@@ -3500,7 +3671,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 await fetchClients();
                 updateClientSwitcher();
-                switchView('nusapulse-map-view');
+                switchView('dashboard-overview-view');
                 appState.isInitialized = true;
             } catch (error) {
                 console.error("Initialization failed:", error);
