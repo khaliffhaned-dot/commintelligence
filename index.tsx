@@ -950,124 +950,139 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // --- NEW MODULE RENDER FUNCTIONS ---
+        // --- LIVE INTEL FEED (real articles from /api/feed, pulled via /api/pull) ---
+        const escapeHtml = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+
+        const INTEL_SECTORS = ['Banking & Finance', 'Energy & Utilities', 'Plantation & Agriculture', 'Technology & Digital',
+            'Telecom & Media', 'Property & Construction', 'Manufacturing & Trade', 'Healthcare', 'Education',
+            'Transport & Logistics', 'Retail & Consumer', 'Tourism & Hospitality', 'Environment & Climate',
+            'Politics & Government', 'Other'];
+        const INTEL_PARTIES: { [key: string]: string } = { BN: 'BN', PH: 'PH', PN: 'PN', GPS: 'GPS (Sarawak)', GRS: 'GRS (Sabah)', Other: 'Other political' };
+        const AUTO_PULL_STALE_SECONDS = 600; // pull on open if data is older than 10 minutes
+        const FEED_POLL_MS = 60000;          // re-check every minute while the page is open
+
+        function timeAgo(unixSeconds: number): string {
+            const diff = Math.max(0, Math.floor(Date.now() / 1000) - unixSeconds);
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+            if (diff < 86400) return `${Math.floor(diff / 3600)} h ago`;
+            return `${Math.floor(diff / 86400)} d ago`;
+        }
+
+        const feedFilters = { sector: '', party: '', sentiment: '' };
+
+        /** Asks the backend to fetch + tag new articles. Returns the API response (or null on failure). */
+        async function pullLatestNews(): Promise<any> {
+            try {
+                const res = await fetch('/api/pull', { method: 'POST' });
+                return await res.json();
+            } catch (e) {
+                console.error('Pull failed', e);
+                return null;
+            }
+        }
+
+        async function loadFeed() {
+            const list = document.getElementById('intel-feed-list');
+            const status = document.getElementById('intel-feed-status');
+            if (!list || !status) return null;
+            const qs = new URLSearchParams({ limit: '60' });
+            (Object.keys(feedFilters) as (keyof typeof feedFilters)[]).forEach(k => { if (feedFilters[k]) qs.set(k, feedFilters[k]); });
+            try {
+                const res = await fetch(`/api/feed?${qs}`);
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                if (!data.items.length) {
+                    list.innerHTML = `<div class="empty-state"><p>No articles${data.total ? ' match these filters' : ' yet'}. ${data.total ? '' : 'Click <strong>Pull latest</strong> to fetch Malaysian news.'}</p></div>`;
+                } else {
+                    list.innerHTML = data.items.map((it: any) => `
+                        <div class="card signal-mention-card">
+                            <div class="mention-card__header">
+                                <div>
+                                    <div class="mention-card__source">${escapeHtml(it.source)}</div>
+                                    <div class="mention-card__timestamp">${timeAgo(it.publishedAt)}</div>
+                                </div>
+                            </div>
+                            <p class="mention-card__content"><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(it.title)}</a></p>
+                            <div class="mention-card__footer">
+                                ${it.sentiment ? `<div class="sentiment-tag sentiment-tag--${escapeHtml(it.sentiment.toLowerCase())}">${escapeHtml(it.sentiment)}</div>` : '<div class="sentiment-tag">Untagged</div>'}
+                                <div class="mention-card__author">${escapeHtml([it.sector, it.party && it.party !== 'None' ? it.party : ''].filter(Boolean).join(' · '))}</div>
+                            </div>
+                        </div>`).join('');
+                }
+                status.textContent = data.lastPull
+                    ? `${data.total} articles stored · last pulled ${timeAgo(data.lastPull)}`
+                    : 'No pulls yet';
+                return data;
+            } catch (e: any) {
+                list.innerHTML = `<div class="empty-state"><p class="error-message">Could not load the feed: ${escapeHtml(e.message)}</p></div>`;
+                return null;
+            }
+        }
+
+        async function pullAndReload(button?: HTMLButtonElement | null) {
+            if (button) { button.disabled = true; button.textContent = 'Pulling…'; }
+            const r = await pullLatestNews();
+            const status = document.getElementById('intel-feed-status');
+            if (status) {
+                if (!r || r.error) status.textContent = `Pull failed: ${r?.error || 'network error'}`;
+                else if (r.skipped) status.textContent = `Pulled recently — next pull available in ${r.nextPullInSeconds}s`;
+            }
+            const data = await loadFeed();
+            if (status && r && r.ok) {
+                status.textContent = `${r.newItems} new article${r.newItems === 1 ? '' : 's'} · ${data?.total ?? ''} stored`
+                    + (r.failedFeeds ? ` · ${r.failedFeeds} source${r.failedFeeds === 1 ? '' : 's'} unavailable` : '');
+            }
+            if (button) { button.disabled = false; button.textContent = 'Pull latest'; }
+        }
+
         function renderSignalFeedView() {
             const container = document.getElementById('signal-feed-view');
             if (!container) return;
+            const opt = (items: string[], label: string) => `<option value="">${label}</option>` + items.map(i => `<option value="${escapeHtml(i)}">${escapeHtml(i)}</option>`).join('');
             container.innerHTML = `
                 <div class="view-header">
                     <div>
-                        <h2>Signal: Real-Time Feed</h2>
-                        <p class="text-secondary">Live mentions from across the Malaysian digital landscape.</p>
+                        <h2>Signal: Live Malaysia Feed</h2>
+                        <p class="text-secondary">Real news across Malaysian sectors and party politics, AI-tagged for sector, coalition and sentiment.</p>
+                        <p class="text-secondary" id="intel-feed-status">Loading…</p>
                     </div>
-                    <div class="form-group" style="min-width: 240px;">
-                        <select id="signal-focus-select" class="form-select">
-                            <option value="all">All Topics</option>
-                            <option value="BN">Barisan Nasional (BN)</option>
-                            <option value="PH">Pakatan Harapan (PH)</option>
-                            <option value="PN">Perikatan Nasional (PN)</option>
-                        </select>
-                    </div>
+                    <button id="intel-pull-button" class="btn btn--primary">Pull latest</button>
                 </div>
-                <div class="signal-feed-grid">
-                    <div class="signal-feed-column" id="signal-col-news">
-                        <h3 class="signal-column-header">News & Blogs</h3>
-                    </div>
-                    <div class="signal-feed-column" id="signal-col-social">
-                        <h3 class="signal-column-header">Social Media</h3>
-                    </div>
-                    <div class="signal-feed-column" id="signal-col-forums">
-                        <h3 class="signal-column-header">Forums & Communities</h3>
-                    </div>
+                <div class="form-group" style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
+                    <select id="feed-filter-sector" class="form-select" style="max-width:260px;">${opt(INTEL_SECTORS, 'All sectors')}</select>
+                    <select id="feed-filter-party" class="form-select" style="max-width:220px;">
+                        <option value="">All parties</option>
+                        ${Object.keys(INTEL_PARTIES).map(k => `<option value="${k}">${INTEL_PARTIES[k]}</option>`).join('')}
+                    </select>
+                    <select id="feed-filter-sentiment" class="form-select" style="max-width:200px;">${opt(['Positive', 'Neutral', 'Negative'], 'Any sentiment')}</select>
                 </div>
+                <div class="signal-feed-column" id="intel-feed-list"></div>
             `;
 
-            const focusSelect = document.getElementById('signal-focus-select') as HTMLSelectElement;
-            if (focusSelect) {
-                focusSelect.value = appState.signalFeedFocus;
-                focusSelect.addEventListener('change', () => {
-                    appState.signalFeedFocus = focusSelect.value;
-                    // Clear existing mentions so the feed reflects the new focus.
-                    ['signal-col-news', 'signal-col-social', 'signal-col-forums'].forEach(colId => {
-                        const col = document.getElementById(colId);
-                        col?.querySelectorAll('.signal-mention-card').forEach(card => card.remove());
-                    });
-                    addNewSignalMention();
-                });
-            }
+            (['sector', 'party', 'sentiment'] as const).forEach(k => {
+                const el = document.getElementById(`feed-filter-${k}`) as HTMLSelectElement;
+                el.value = feedFilters[k];
+                el.addEventListener('change', () => { feedFilters[k] = el.value; loadFeed(); });
+            });
+            const pullBtn = document.getElementById('intel-pull-button') as HTMLButtonElement;
+            pullBtn.addEventListener('click', () => pullAndReload(pullBtn));
 
-            // Use live AI-generated data for the feed
-            if (appState.signalFeedIntervalId) {
-                clearInterval(appState.signalFeedIntervalId);
-            }
-            appState.signalFeedIntervalId = setInterval(addNewSignalMention, 5000);
-
-            // Add some initial data
-            addNewSignalMention();
-            setTimeout(addNewSignalMention, 1500);
+            // Show what we have, pull if stale, then keep checking while this page stays open.
+            loadFeed().then(data => {
+                const stale = !data || !data.lastPull || (Date.now() / 1000 - data.lastPull) > AUTO_PULL_STALE_SECONDS;
+                if (stale) pullAndReload(pullBtn);
+            });
+            if (appState.signalFeedIntervalId) clearInterval(appState.signalFeedIntervalId);
+            appState.signalFeedIntervalId = setInterval(async () => {
+                const view = document.getElementById('signal-feed-view');
+                if (!view || view.classList.contains('view-hidden') || document.hidden) return;
+                const data = await loadFeed();
+                if (data && data.lastPull && (Date.now() / 1000 - data.lastPull) > AUTO_PULL_STALE_SECONDS) pullAndReload(pullBtn);
+            }, FEED_POLL_MS);
         }
-        
-        /**
-         * Generates a new mention from the Hunyuan API and adds it to the feed.
-         */
-        async function addNewSignalMention() {
-            try {
-                const focus = appState.signalFeedFocus;
-                const focusInstruction = focus && focus !== 'all'
-                    ? `The mention must relate specifically to the Malaysian political coalition ${COALITION_NAMES[focus] || focus} — public commentary, reactions, or news coverage about it, from a realistic mix of supportive, critical, and neutral voices.`
-                    : `The mention should relate to a plausible Malaysian company or topic.`;
-                const prompt = `
-                    You are a real-time media monitoring AI for Malaysia. Generate a single, plausible, and recent-looking media mention.
-                    The mention should be from one of three categories: 'news', 'social', or 'forum'.
-                    ${focusInstruction} Keep the content brief.
-                    Return a single valid JSON object with the following keys:
-                    - "type": "news", "social", or "forum".
-                    - "source": A plausible source name (e.g., "The Star Online", "Twitter", "Lowyat.NET").
-                    - "author": A plausible author (e.g., "by Business Desk", "from @user123", "by anonymous_poster").
-                    - "content": The text of the mention (string).
-                    - "sentiment": "Positive", "Neutral", or "Negative".
-                `;
 
-                const mention = await generateJson(prompt);
-
-                const mentionConfig = {
-                    news: { colId: 'signal-col-news', icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>` },
-                    social: { colId: 'signal-col-social', icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg>` },
-                    forum: { colId: 'signal-col-forums', icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z"/></svg>` },
-                };
-
-                const config = mentionConfig[mention.type as keyof typeof mentionConfig];
-                const column = document.getElementById(config.colId);
-                const sentimentClass = mention.sentiment.toLowerCase();
-
-                if (column) {
-                    const card = document.createElement('div');
-                    card.className = 'card signal-mention-card new-mention';
-                    card.innerHTML = `
-                        <div class="mention-card__header">
-                            <div class="mention-card__icon mention-card__icon--${mention.type}">
-                                ${config.icon}
-                            </div>
-                            <div>
-                                <div class="mention-card__source">${mention.source}</div>
-                                <div class="mention-card__timestamp">Just now</div>
-                            </div>
-                        </div>
-                        <p class="mention-card__content">${mention.content}</p>
-                        <div class="mention-card__footer">
-                            <div class="sentiment-tag sentiment-tag--${sentimentClass}">${mention.sentiment}</div>
-                            <div class="mention-card__author">${mention.author}</div>
-                        </div>
-                    `;
-                    // Insert after the header
-                    column.insertBefore(card, column.children[1]);
-                    
-                    // Trigger animation
-                    setTimeout(() => card.classList.remove('new-mention'), 10);
-                }
-            } catch (error) {
-                console.error("Failed to generate signal mention:", error);
-            }
-        }
 
 
         async function renderNexusForecasterView() {
@@ -2750,209 +2765,121 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         }
 
-        /** Renders NusaPulse: Party Sentiment Tracker View */
+        /** Renders NusaPulse: Party Sentiment Tracker, built from real stored coverage (/api/stats). */
         async function renderNusaPulsePartyTrackerView() {
             const container = document.getElementById('nusapulse-party-tracker-view');
             if (!container) return;
+            container.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Loading media sentiment…</p></div>`;
+            try {
+                const [statsRes, feedRes] = await Promise.all([fetch('/api/stats?days=7'), fetch('/api/feed?limit=200')]);
+                const stats = await statsRes.json();
+                const feed = await feedRes.json();
+                if (stats.error) throw new Error(stats.error);
+                renderPartyTrackerContent(stats, feed.items || []);
+            } catch (e: any) {
+                container.innerHTML = `<div class="empty-state"><h3>Could not load tracker</h3><p class="error-message">${escapeHtml(e.message)}</p></div>`;
+            }
+        }
 
-            const cacheKey = 'partySentimentTracker';
-            if (appState.cache[cacheKey]) {
-                renderPartyTrackerContent(appState.cache[cacheKey]);
+        function renderPartyTrackerContent(stats: any, items: any[]) {
+            const container = document.getElementById('nusapulse-party-tracker-view');
+            if (!container) return;
+            const codes = ['BN', 'PH', 'PN', 'GPS', 'GRS'];
+            const tally = (code: string, s: string) => (stats.byParty as any[]).filter(r => r.party === code && r.sentiment === s).reduce((a, r) => a + r.n, 0);
+            const rows = codes.map(code => {
+                const pos = tally(code, 'Positive'), neu = tally(code, 'Neutral'), neg = tally(code, 'Negative');
+                const total = pos + neu + neg;
+                return { code, pos, neu, neg, total, net: total ? Math.round(((pos - neg) / total) * 100) : 0 };
+            });
+            const grand = rows.reduce((a, r) => a + r.total, 0);
+
+            if (!grand) {
+                container.innerHTML = `
+                    <div class="view-header"><div><h2>NusaPulse: Party Sentiment Tracker</h2></div></div>
+                    <div class="empty-state"><p>No tagged political coverage yet. Open <strong>Signal → Live Malaysia Feed</strong> and click <strong>Pull latest</strong> first.</p></div>`;
                 return;
             }
-            await loadPartyTrackerData();
-        }
 
-        async function loadPartyTrackerData() {
-            const container = document.getElementById('nusapulse-party-tracker-view');
-            if (!container) return;
-            const cacheKey = 'partySentimentTracker';
-            container.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Analyzing national sentiment across Malaysia's political coalitions...</p></div>`;
-            try {
-                const data = await fetchPartySentimentTrackerData();
-                appState.cache[cacheKey] = data;
-                renderPartyTrackerContent(data);
-            } catch (error) {
-                console.error("Failed to fetch party sentiment tracker data", error);
-                container.innerHTML = `<div class="empty-state">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                    <h3>Analysis Failed</h3>
-                    <p class="error-message">Could not generate the party sentiment report. The backend service may be unavailable.</p>
-                </div>`;
-            }
-        }
+            const headlines = (code: string) => items.filter(i => i.party === code).slice(0, 4).map(i =>
+                `<li><a href="${escapeHtml(i.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(i.title)}</a> <span class="text-secondary">— ${escapeHtml(i.source)}</span></li>`).join('');
 
-        /**
-         * Fetches an AI-generated, indicative national sentiment comparison across Malaysia's
-         * major political coalitions (BN, PH, PN) for strategy purposes. This is AI-estimated
-         * analysis, not a substitute for verified polling data.
-         */
-        async function fetchPartySentimentTrackerData() {
-            const prompt = `
-                You are a neutral Malaysian political analyst producing an indicative national sentiment briefing
-                for internal strategy use. Cover the three major coalitions: Barisan Nasional (BN), Pakatan Harapan (PH),
-                and Perikatan Nasional (PN).
-
-                Return a single valid JSON object with this exact structure:
-                {
-                    "asOfPeriod": a short label for the current period (e.g. "Q3 2026"),
-                    "nationalMood": {
-                        "rightDirectionPct": integer 0-100,
-                        "wrongDirectionPct": integer 0-100 (should roughly complement rightDirectionPct),
-                        "topIssues": array of 5 objects with "issue" (short string, e.g. "Cost of Living") and "pct" (integer 0-100, share of respondents citing it as a top concern)
-                    },
-                    "coalitions": array of exactly 3 objects, one each for "BN", "PH", "PN", each with:
-                        - "coalition": the short code ("BN", "PH", or "PN"),
-                        - "fullName": full coalition name,
-                        - "overallApproval": integer 0-100,
-                        - "sentiment": object with "positive", "neutral", "negative" integers summing to 100,
-                        - "trend": "Rising", "Stable", or "Declining",
-                        - "topLeaders": array of 2-3 objects with "name" and "approvalPct" (integer 0-100),
-                        - "strengths": array of 2-3 short strings describing current strategic strengths,
-                        - "vulnerabilities": array of 2-3 short strings describing current strategic vulnerabilities,
-                        - "trendingNarratives": array of 2-3 short strings describing what is currently being said about this coalition in public discourse
-                }
-
-                Keep the analysis balanced and analytical (not promotional toward any single coalition), grounded in plausible,
-                current Malaysian political dynamics (economy/cost of living, coalition stability, leadership approval, state-level contests).
-            `;
-            return generateJson(prompt);
-        }
-
-        function renderPartyTrackerContent(data: any) {
-            const container = document.getElementById('nusapulse-party-tracker-view');
-            if (!container) return;
-
-            const trendClass = (trend: string) => (trend || '').toLowerCase();
-
-            const issuesListHtml = (data.nationalMood?.topIssues || []).map((i: any) =>
-                `<li>${i.issue} <span class="text-secondary">(${i.pct}%)</span></li>`
-            ).join('');
-
-            const coalitionCardsHtml = (data.coalitions || []).map((c: any) => {
-                const leadersHtml = (c.topLeaders || []).map((l: any) => `
-                    <div class="coalition-leader-item"><span>${l.name}</span><span class="coalition-leader-item__approval">${l.approvalPct}%</span></div>
-                `).join('');
-                const strengthsHtml = (c.strengths || []).map((s: string) => `<li>${s}</li>`).join('');
-                const vulnerabilitiesHtml = (c.vulnerabilities || []).map((v: string) => `<li>${v}</li>`).join('');
-                const narrativesHtml = (c.trendingNarratives || []).map((n: string) => `<li>${n}</li>`).join('');
-                return `
-                    <div class="card">
-                        <div class="card__header coalition-detail-card__header">
-                            <h3>${c.fullName || c.coalition}</h3>
-                            <span class="trend-badge trend-badge--${trendClass(c.trend)}">${c.trend}</span>
-                        </div>
-                        <div class="card__body">
-                            <div class="propagation-metric"><span class="propagation-metric__label">Overall Approval</span><span class="propagation-metric__value">${c.overallApproval}%</span></div>
-                            <h5 class="text-secondary" style="margin: 1rem 0 0.5rem;">Top Leaders</h5>
-                            <div class="coalition-leader-list">${leadersHtml}</div>
-                            <div class="ai-report-section"><h4>Strengths</h4><ul>${strengthsHtml}</ul></div>
-                            <div class="ai-report-section"><h4>Vulnerabilities</h4><ul>${vulnerabilitiesHtml}</ul></div>
-                            <div class="ai-report-section"><h4>Trending Narratives</h4><ul>${narrativesHtml}</ul></div>
-                        </div>
+            const cards = rows.filter(r => r.total).map(r => `
+                <div class="card">
+                    <div class="card__header coalition-detail-card__header"><h3>${escapeHtml(INTEL_PARTIES[r.code] || r.code)}</h3>
+                        <span class="trend-badge trend-badge--${r.net > 5 ? 'rising' : r.net < -5 ? 'declining' : 'stable'}">Net ${r.net > 0 ? '+' : ''}${r.net}</span></div>
+                    <div class="card__body">
+                        <div class="propagation-metric"><span class="propagation-metric__label">Articles (7 days)</span><span class="propagation-metric__value">${r.total}</span></div>
+                        <div class="ai-report-section"><h4>Latest headlines</h4><ul>${headlines(r.code) || '<li>None yet</li>'}</ul></div>
                     </div>
-                `;
-            }).join('');
+                </div>`).join('');
 
             container.innerHTML = `
                 <div class="view-header">
                     <div>
                         <h2>NusaPulse: Party Sentiment Tracker</h2>
-                        <p class="text-secondary">AI-estimated national sentiment across Malaysia's coalitions &middot; ${data.asOfPeriod}</p>
+                        <p class="text-secondary">Media sentiment from ${grand} tagged articles over the last ${stats.days} days. This reflects news coverage, not polling.</p>
                     </div>
-                    <div style="display: flex; gap: 0.75rem;">
+                    <div style="display:flex; gap:0.75rem;">
                         <button id="refresh-party-tracker-button" class="btn btn--secondary">Refresh</button>
                         <button id="export-party-tracker-pdf-button" class="btn btn--secondary">Export as PDF</button>
                     </div>
                 </div>
                 <div class="insights-grid" id="party-tracker-export-content">
-                    <div class="card">
-                        <div class="card__header"><h3>National Mood</h3></div>
-                        <div id="party-mood-chart" class="card__body"></div>
-                    </div>
-                    <div class="card">
-                        <div class="card__header"><h3>Top National Issues</h3></div>
-                        <div class="card__body"><ul class="ai-report-section" style="padding-left: 1.2rem;">${issuesListHtml}</ul></div>
-                    </div>
-                    <div class="card">
-                        <div class="card__header"><h3>Coalition Approval</h3></div>
-                        <div id="party-approval-chart" class="card__body"></div>
-                    </div>
-                    <div class="card">
-                        <div class="card__header"><h3>Coalition Sentiment Comparison</h3></div>
-                        <div id="party-sentiment-comp-chart" class="card__body"></div>
-                    </div>
-                    <div style="grid-column: 1 / -1;" class="coalition-detail-grid">
-                        ${coalitionCardsHtml}
-                    </div>
-                </div>
-            `;
+                    <div class="card"><div class="card__header"><h3>Coverage Volume by Party</h3></div><div id="party-volume-chart" class="card__body"></div></div>
+                    <div class="card"><div class="card__header"><h3>Sentiment Mix by Party</h3></div><div id="party-sentiment-comp-chart" class="card__body"></div></div>
+                    <div class="card" style="grid-column: 1 / -1;"><div class="card__header"><h3>Daily Net Sentiment</h3></div><div id="party-daily-chart" class="card__body"></div></div>
+                    <div style="grid-column: 1 / -1;" class="coalition-detail-grid">${cards}</div>
+                </div>`;
 
-            document.getElementById('refresh-party-tracker-button')?.addEventListener('click', () => {
-                delete appState.cache['partySentimentTracker'];
-                loadPartyTrackerData();
-            });
+            document.getElementById('refresh-party-tracker-button')?.addEventListener('click', renderNusaPulsePartyTrackerView);
             document.getElementById('export-party-tracker-pdf-button')?.addEventListener('click', () => handleGenericPdfExport(
-                'party-tracker-export-content',
-                'export-party-tracker-pdf-button',
-                'Party Sentiment Tracker Report'
-            ));
+                'party-tracker-export-content', 'export-party-tracker-pdf-button', 'Party Sentiment Tracker Report'));
 
-            initializePartyTrackerCharts(data);
-        }
-
-        function initializePartyTrackerCharts(data: any) {
             const theme = document.body.classList.contains('dark') ? 'dark' : 'light';
-            const coalitions = data.coalitions || [];
-
-            if (appState.charts['partyMood']) appState.charts['partyMood'].destroy();
-            const moodOptions = {
-                series: [data.nationalMood?.rightDirectionPct ?? 0, data.nationalMood?.wrongDirectionPct ?? 0],
-                chart: { type: 'donut', height: 350 },
-                labels: ['Right Direction', 'Wrong Direction'],
-                colors: ['var(--success)', 'var(--danger)'],
-                legend: { position: 'bottom', labels: { colors: 'var(--text-secondary)' } },
-                tooltip: { theme: theme, fillSeriesColor: false }
+            const axis = { labels: { style: { colors: 'var(--text-secondary)' } } };
+            const make = (key: string, sel: string, opts: any) => {
+                if (appState.charts[key]) appState.charts[key].destroy();
+                appState.charts[key] = new ApexCharts(document.querySelector(sel), { ...opts, tooltip: { theme }, grid: { borderColor: 'var(--border-color)' } });
+                appState.charts[key].render();
             };
-            appState.charts['partyMood'] = new ApexCharts(document.querySelector('#party-mood-chart'), moodOptions);
-            appState.charts['partyMood'].render();
-
-            if (appState.charts['partyApproval']) appState.charts['partyApproval'].destroy();
-            const approvalOptions = {
-                series: [{ name: 'Approval', data: coalitions.map((c: any) => c.overallApproval) }],
-                chart: { type: 'bar', height: 350, toolbar: { show: false } },
-                plotOptions: { bar: { borderRadius: 4, columnWidth: '50%' } },
-                dataLabels: { enabled: false },
-                xaxis: { categories: coalitions.map((c: any) => c.coalition), labels: { style: { colors: 'var(--text-secondary)' } } },
-                yaxis: { labels: { formatter: (val: number) => `${val}%`, style: { colors: 'var(--text-secondary)' } } },
-                colors: ['var(--primary)'],
-                grid: { borderColor: 'var(--border-color)' },
-                tooltip: { theme: theme }
-            };
-            appState.charts['partyApproval'] = new ApexCharts(document.querySelector('#party-approval-chart'), approvalOptions);
-            appState.charts['partyApproval'].render();
-
-            if (appState.charts['partySentimentComp']) appState.charts['partySentimentComp'].destroy();
-            const sentimentCompOptions = {
+            const labels = rows.map(r => r.code);
+            make('partyVolume', '#party-volume-chart', {
+                series: [{ name: 'Articles', data: rows.map(r => r.total) }],
+                chart: { type: 'bar', height: 320, toolbar: { show: false } },
+                plotOptions: { bar: { borderRadius: 4, columnWidth: '50%' } }, dataLabels: { enabled: false },
+                xaxis: { categories: labels, ...axis }, yaxis: axis, colors: ['var(--primary)'],
+            });
+            make('partySentimentComp', '#party-sentiment-comp-chart', {
                 series: [
-                    { name: 'Positive', data: coalitions.map((c: any) => c.sentiment?.positive ?? 0) },
-                    { name: 'Neutral', data: coalitions.map((c: any) => c.sentiment?.neutral ?? 0) },
-                    { name: 'Negative', data: coalitions.map((c: any) => c.sentiment?.negative ?? 0) },
+                    { name: 'Positive', data: rows.map(r => r.pos) },
+                    { name: 'Neutral', data: rows.map(r => r.neu) },
+                    { name: 'Negative', data: rows.map(r => r.neg) },
                 ],
-                chart: { type: 'bar', height: 350, stacked: true, toolbar: { show: false } },
-                plotOptions: { bar: { horizontal: false, columnWidth: '55%' } },
-                dataLabels: { enabled: false },
-                xaxis: { categories: coalitions.map((c: any) => c.coalition), labels: { style: { colors: 'var(--text-secondary)' } } },
-                yaxis: { labels: { formatter: (val: number) => `${val}%`, style: { colors: 'var(--text-secondary)' } } },
-                fill: { opacity: 1 },
+                chart: { type: 'bar', height: 320, stacked: true, toolbar: { show: false } },
+                plotOptions: { bar: { columnWidth: '55%' } }, dataLabels: { enabled: false },
+                xaxis: { categories: labels, ...axis }, yaxis: axis, fill: { opacity: 1 },
                 colors: ['var(--success)', 'var(--warning)', 'var(--danger)'],
                 legend: { position: 'top', horizontalAlign: 'right', labels: { colors: 'var(--text-secondary)' } },
-                grid: { borderColor: 'var(--border-color)' },
-                tooltip: { theme: theme }
+            });
+            const days: string[] = [...new Set<string>((stats.partyDaily as any[]).map(r => r.day))].sort();
+            const net = (code: string, day: string) => {
+                const r = (stats.partyDaily as any[]).filter(x => x.party === code && x.day === day);
+                const t = r.reduce((a, x) => a + x.n, 0);
+                const p = r.filter(x => x.sentiment === 'Positive').reduce((a, x) => a + x.n, 0);
+                const n = r.filter(x => x.sentiment === 'Negative').reduce((a, x) => a + x.n, 0);
+                return t ? Math.round(((p - n) / t) * 100) : null;
             };
-            appState.charts['partySentimentComp'] = new ApexCharts(document.querySelector('#party-sentiment-comp-chart'), sentimentCompOptions);
-            appState.charts['partySentimentComp'].render();
+            make('partyDaily', '#party-daily-chart', {
+                series: rows.filter(r => r.total).map(r => ({ name: r.code, data: days.map(d => net(r.code, d)) })),
+                chart: { type: 'line', height: 320, toolbar: { show: false } },
+                stroke: { curve: 'smooth', width: 3 }, markers: { size: 4 },
+                xaxis: { categories: days, ...axis },
+                yaxis: { min: -100, max: 100, labels: { formatter: (v: number) => `${v}`, style: { colors: 'var(--text-secondary)' } } },
+                legend: { position: 'top', horizontalAlign: 'right', labels: { colors: 'var(--text-secondary)' } },
+            });
         }
+
+
 
         // --- UI Rendering & App Initialization ---
         const viewRenderers: { [key: string]: () => void } = {

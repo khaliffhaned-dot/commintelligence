@@ -3,5 +3,12 @@
   "name": "commet",
   "compatibility_date": "2026-10-01",
   "pages_build_output_dir": "./dist",
-  "ai": { "binding": "AI" }
+  "ai": { "binding": "AI" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "commet-intel",
+      "database_id": "cc47c154-7607-47a5-b3b2-17ad89b26373"
+    }
+  ]
 }
