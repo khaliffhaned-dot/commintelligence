@@ -4,15 +4,15 @@ import { computeObjective } from '../_lib/measure.js';
 const MAX_OBJECTIVES = 50;
 
 // GET /api/objectives -> objectives with their current measured value and status
-export async function onRequestGet({ env }) {
+export async function onRequestGet({ env, data }) {
     if (!env.DB) return json({ error: 'Missing D1 (DB) binding.' }, 500);
-    const { results } = await env.DB.prepare('SELECT * FROM objectives ORDER BY created_at DESC').all();
+    const { results } = await env.DB.prepare('SELECT * FROM objectives WHERE org_id = ? ORDER BY created_at DESC').bind(data.auth.org.id).all();
     const withValues = await Promise.all(results.map(async (o) => ({ ...o, ...(await computeObjective(env.DB, o)) })));
     return json({ objectives: withValues }, 200, { 'Cache-Control': 'no-store' });
 }
 
 // POST /api/objectives  { name, metric, comparator, target, party?, sector?, audience?, days }
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, data }) {
     if (!env.DB) return json({ error: 'Missing D1 (DB) binding.' }, 500);
     let b;
     try { b = await request.json(); } catch { return json({ error: 'Body must be JSON.' }, 400); }
@@ -30,21 +30,21 @@ export async function onRequestPost({ request, env }) {
     if (sector && !SECTORS.includes(sector)) return json({ error: 'Unknown sector.' }, 400);
     if (audience && !AUDIENCES.includes(audience)) return json({ error: 'Unknown audience.' }, 400);
 
-    const count = await env.DB.prepare('SELECT COUNT(*) AS n FROM objectives').first();
+    const count = await env.DB.prepare('SELECT COUNT(*) AS n FROM objectives WHERE org_id = ?').bind(data.auth.org.id).first();
     if (count.n >= MAX_OBJECTIVES) return json({ error: `Limit of ${MAX_OBJECTIVES} objectives reached.` }, 400);
 
     const id = crypto.randomUUID();
     await env.DB.prepare(
-        'INSERT INTO objectives (id, name, metric, comparator, target, party, sector, audience, days, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-    ).bind(id, name, b.metric, b.comparator, target, party, sector, audience, days, Math.floor(Date.now() / 1000)).run();
+        'INSERT INTO objectives (id, org_id, name, metric, comparator, target, party, sector, audience, days, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+    ).bind(id, data.auth.org.id, name, b.metric, b.comparator, target, party, sector, audience, days, Math.floor(Date.now() / 1000)).run();
     return json({ ok: true, id });
 }
 
 // DELETE /api/objectives?id=...
-export async function onRequestDelete({ request, env }) {
+export async function onRequestDelete({ request, env, data }) {
     if (!env.DB) return json({ error: 'Missing D1 (DB) binding.' }, 500);
     const id = new URL(request.url).searchParams.get('id');
     if (!id) return json({ error: 'Missing id.' }, 400);
-    await env.DB.prepare('DELETE FROM objectives WHERE id = ?').bind(id).run();
+    await env.DB.prepare('DELETE FROM objectives WHERE id = ? AND org_id = ?').bind(id, data.auth.org.id).run();
     return json({ ok: true });
 }

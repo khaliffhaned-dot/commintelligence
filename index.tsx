@@ -3,6 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
+// --- Auth-aware API client ---
+// Every request carries X-Requested-With (the server rejects state-changing calls without it, as CSRF protection).
+// A 401 anywhere re-opens the sign-in screen.
+const authState: { user: any; org: any; role: string | null; onAuthRequired: (() => void) | null } = { user: null, org: null, role: null, onAuthRequired: null };
+
+async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
+    const res = await fetch(url, { ...init, headers: { 'X-Requested-With': 'fetch', ...((init.headers as any) || {}) }, credentials: 'same-origin' });
+    if (res.status === 401 && !url.startsWith('/api/auth/')) authState.onAuthRequired?.();
+    return res;
+}
+
 /**
  * Calls the Cloudflare Pages Function at /api/ai, which holds HUNYUAN_API_KEY
  * server-side, forwards the request to Hunyuan and returns the parsed JSON object.
@@ -10,7 +21,7 @@
 async function generateJson(prompt: string, imageParts?: { mimeType: string, data: string }[]): Promise<any> {
     let response: Response;
     try {
-        response = await fetch('/api/ai', {
+        response = await apiFetch('/api/ai', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt, imageParts }),
@@ -975,7 +986,7 @@ document.addEventListener('DOMContentLoaded', () => {
         /** Asks the backend to fetch + tag new articles. Returns the API response (or null on failure). */
         async function pullLatestNews(): Promise<any> {
             try {
-                const res = await fetch('/api/pull', { method: 'POST' });
+                const res = await apiFetch('/api/pull', { method: 'POST' });
                 return await res.json();
             } catch (e) {
                 console.error('Pull failed', e);
@@ -990,7 +1001,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const qs = new URLSearchParams({ limit: '60' });
             (Object.keys(feedFilters) as (keyof typeof feedFilters)[]).forEach(k => { if (feedFilters[k]) qs.set(k, feedFilters[k]); });
             try {
-                const res = await fetch(`/api/feed?${qs}`);
+                const res = await apiFetch(`/api/feed?${qs}`);
                 const data = await res.json();
                 if (data.error) throw new Error(data.error);
                 if (!data.items.length) {
@@ -2772,7 +2783,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!container) return;
             container.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Loading media sentiment…</p></div>`;
             try {
-                const [statsRes, feedRes] = await Promise.all([fetch('/api/stats?days=7'), fetch('/api/feed?limit=200')]);
+                const [statsRes, feedRes] = await Promise.all([apiFetch('/api/stats?days=7'), apiFetch('/api/feed?limit=200')]);
                 const stats = await statsRes.json();
                 const feed = await feedRes.json();
                 if (stats.error) throw new Error(stats.error);
@@ -2902,7 +2913,7 @@ document.addEventListener('DOMContentLoaded', () => {
             container.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Loading measurement report…</p></div>`;
             let report: any;
             try {
-                const res = await fetch(`/api/report?days=${measureDays}`);
+                const res = await apiFetch(`/api/report?days=${measureDays}`);
                 report = await res.json();
                 if (report.error) throw new Error(report.error);
             } catch (e: any) {
@@ -2995,13 +3006,13 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('measure-days')?.addEventListener('change', (e) => { measureDays = Number((e.target as HTMLSelectElement).value); renderMeasureObjectivesView(); });
             document.getElementById('export-measure-pdf-button')?.addEventListener('click', () => handleGenericPdfExport('measure-export-content', 'export-measure-pdf-button', 'Measurement Report (Barcelona Principles 4.0)'));
             document.querySelectorAll('[data-delete-objective]').forEach(btn => btn.addEventListener('click', async () => {
-                await fetch(`/api/objectives?id=${encodeURIComponent((btn as HTMLElement).dataset.deleteObjective || '')}`, { method: 'DELETE' });
+                await apiFetch(`/api/objectives?id=${encodeURIComponent((btn as HTMLElement).dataset.deleteObjective || '')}`, { method: 'DELETE' });
                 renderMeasureObjectivesView();
             }));
             document.getElementById('obj-add')?.addEventListener('click', async () => {
                 const v = (id: string) => (document.getElementById(id) as HTMLInputElement).value;
                 const msg = document.getElementById('obj-msg')!;
-                const res = await fetch('/api/objectives', {
+                const res = await apiFetch('/api/objectives', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: v('obj-name'), metric: v('obj-metric'), comparator: v('obj-comparator'), target: v('obj-target'),
                         days: v('obj-days'), party: v('obj-party'), sector: v('obj-sector'), audience: v('obj-audience') }),
@@ -3031,7 +3042,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const container = document.getElementById('measure-methodology-view');
             if (!container) return;
             let q: any = null;
-            try { q = (await (await fetch('/api/report?days=90')).json()).dataQuality; } catch { /* shown as unavailable */ }
+            try { q = (await (await apiFetch('/api/report?days=90')).json()).dataQuality; } catch { /* shown as unavailable */ }
             const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : '—');
             const principles = [
                 ['1', 'Set clear, measurable objectives', 'Measure → Objectives & Impact: objectives with a metric, target, scope and window, tracked against real coverage.', 'Supported'],
@@ -3072,6 +3083,86 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <p class="text-secondary" style="margin-top:1rem;">Reference: AMEC Barcelona Principles V4.0, amecorg.com. Paraphrased; read the original for the full text.</p>`;
         }
+
+        // --- ACCOUNTS: sign-in screen, session check, user menu ---
+        function showAuthOverlay(onSuccess: () => void) {
+            document.getElementById('auth-overlay')?.remove();
+            let mode: 'login' | 'signup' = 'login';
+            const overlay = document.createElement('div');
+            overlay.id = 'auth-overlay';
+            document.body.appendChild(overlay);
+
+            const render = () => {
+                const signup = mode === 'signup';
+                overlay.innerHTML = `
+                    <div class="auth-card card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+                        <div class="card__body">
+                            <h2 id="auth-title">${signup ? 'Create your account' : 'Sign in to PRVAIL'}</h2>
+                            <p class="text-secondary">${signup ? 'Your organisation gets its own private workspace.' : 'Welcome back.'}</p>
+                            <form id="auth-form" novalidate>
+                                ${signup ? '<div class="form-group"><label for="auth-name">Your name</label><input id="auth-name" class="form-input" autocomplete="name" maxlength="80"></div><div class="form-group"><label for="auth-org">Organisation</label><input id="auth-org" class="form-input" autocomplete="organization" maxlength="80" required></div>' : ''}
+                                <div class="form-group"><label for="auth-email">Email</label><input id="auth-email" type="email" class="form-input" autocomplete="email" required></div>
+                                <div class="form-group"><label for="auth-password">Password</label><input id="auth-password" type="password" class="form-input" autocomplete="${signup ? 'new-password' : 'current-password'}" required>${signup ? '<small class="text-secondary">At least 10 characters.</small>' : ''}</div>
+                                ${signup ? '<div class="form-group"><label for="auth-code">Invite code <span class="text-secondary">(if you were given one)</span></label><input id="auth-code" class="form-input" autocomplete="off"></div>' : ''}
+                                <p id="auth-error" class="error-message" role="alert" style="min-height:1.2em;"></p>
+                                <button id="auth-submit" class="btn btn--primary" type="submit" style="width:100%;">${signup ? 'Create account' : 'Sign in'}</button>
+                            </form>
+                            <p style="margin-top:1rem; text-align:center;"><a href="#" id="auth-toggle">${signup ? 'Already have an account? Sign in' : 'New here? Create an account'}</a></p>
+                        </div>
+                    </div>`;
+                document.getElementById('auth-toggle')!.addEventListener('click', (e) => { e.preventDefault(); mode = signup ? 'login' : 'signup'; render(); });
+                (document.getElementById(signup ? 'auth-name' : 'auth-email') as HTMLInputElement | null)?.focus();
+                document.getElementById('auth-form')!.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const val = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value || '';
+                    const err = document.getElementById('auth-error')!;
+                    const btn = document.getElementById('auth-submit') as HTMLButtonElement;
+                    err.textContent = '';
+                    btn.disabled = true;
+                    try {
+                        const res = await apiFetch(signup ? '/api/auth/signup' : '/api/auth/login', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(signup
+                                ? { name: val('auth-name'), orgName: val('auth-org'), email: val('auth-email'), password: val('auth-password'), code: val('auth-code') }
+                                : { email: val('auth-email'), password: val('auth-password') }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok || data.error) { err.textContent = data.error || 'Something went wrong. Try again.'; btn.disabled = false; return; }
+                        authState.user = data.user; authState.org = data.org; authState.role = data.role;
+                        overlay.remove();
+                        onSuccess();
+                    } catch {
+                        err.textContent = 'Could not reach the server. Check your connection and try again.';
+                        btn.disabled = false;
+                    }
+                });
+            };
+            render();
+        }
+
+        /** Resolves once the visitor has a valid session, showing the sign-in screen if they do not. */
+        async function ensureSignedIn(): Promise<void> {
+            try {
+                const me = await (await apiFetch('/api/auth/me')).json();
+                if (me.authenticated) { authState.user = me.user; authState.org = me.org; authState.role = me.role; return; }
+            } catch { /* fall through to the sign-in screen */ }
+            await new Promise<void>(resolve => showAuthOverlay(resolve));
+        }
+
+        function renderUserMenu() {
+            const el = document.getElementById('user-menu-container');
+            if (!el || !authState.user) return;
+            el.innerHTML = `<span class="user-menu__who" title="${escapeHtml(authState.user.email)}">${escapeHtml(authState.user.name || authState.user.email)} · ${escapeHtml(authState.org?.name || '')}</span><button id="logout-button" class="btn btn--secondary" type="button">Sign out</button>`;
+            document.getElementById('logout-button')?.addEventListener('click', async () => {
+                try { await apiFetch('/api/auth/logout', { method: 'POST' }); } finally { location.reload(); }
+            });
+        }
+
+        // If a session expires mid-use, ask the user to sign in again and refresh what they were looking at.
+        authState.onAuthRequired = () => {
+            if (document.getElementById('auth-overlay')) return;
+            showAuthOverlay(() => { renderUserMenu(); switchView(getActiveView()); });
+        };
 
         // --- UI Rendering & App Initialization ---
         const viewRenderers: { [key: string]: () => void } = {
@@ -3354,6 +3445,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <header class="header">
                         <h2 id="view-title">Regional Map</h2>
                         <div class="header__actions">
+                            <div id="user-menu-container" class="user-menu"></div>
                             <div id="client-switcher-container">
                                 <!-- Client switcher is rendered here -->
                             </div>
@@ -3462,10 +3554,12 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             // Launch Button
-            document.getElementById('launch-button')?.addEventListener('click', () => {
+            document.getElementById('launch-button')?.addEventListener('click', async () => {
+                await ensureSignedIn();
                 landingPage?.classList.add('hidden');
                 appContainer?.classList.remove('hidden');
                 renderAppStructure();
+                renderUserMenu();
                 setupEventListeners(); // Re-attach listeners to the newly rendered DOM
                 initializeApp();
             });

@@ -959,3 +959,11 @@ body.dark .sub-nav-item.active { background-color: rgba(229, 62, 62, 0.15); }
 .measure-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
 .measure-table th { text-align: left; padding: 0.6rem 0.75rem; border-bottom: 2px solid var(--border-color); color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
 .measure-table td { padding: 0.75rem; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+
+/* Accounts */
+#auth-overlay { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(0, 0, 0, 0.55); overflow-y: auto; }
+.auth-card { width: min(420px, 100%); }
+.auth-card h2 { margin: 0 0 0.25rem; }
+.user-menu { display: flex; align-items: center; gap: 0.75rem; }
+.user-menu__who { font-size: 0.9rem; color: var(--text-secondary); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 700px) { .user-menu__who { display: none; } }

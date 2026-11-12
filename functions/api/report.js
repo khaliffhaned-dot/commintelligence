@@ -3,7 +3,7 @@ import { computeObjective } from '../_lib/measure.js';
 
 // GET /api/report?days=30
 // Barcelona Principle 6: report outputs, outcomes and impact. No advertising value equivalents (AVEs) anywhere.
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env, data }) {
     if (!env.DB) return json({ error: 'Missing D1 (DB) binding.' }, 500);
     const days = Math.min(Math.max(parseInt(new URL(request.url).searchParams.get('days') || '30', 10) || 30, 1), 90);
     const since = Math.floor(Date.now() / 1000) - days * 86400;
@@ -16,7 +16,7 @@ export async function onRequestGet({ request, env }) {
         q("SELECT audience, sentiment, COUNT(*) AS n FROM items WHERE published_at >= ? AND classified = 1 AND audience IS NOT NULL GROUP BY audience, sentiment"),
         q("SELECT party, COUNT(*) AS n FROM items WHERE published_at >= ? AND classified = 1 AND party IN ('BN','PH','PN','GPS','GRS') GROUP BY party"),
         q('SELECT SUM(classified) AS tagged, COUNT(*) AS total, SUM(CASE WHEN audience IS NOT NULL THEN 1 ELSE 0 END) AS withAudience FROM items WHERE published_at >= ?'),
-        env.DB.prepare('SELECT * FROM objectives ORDER BY created_at DESC').all().then((r) => r.results),
+        env.DB.prepare('SELECT * FROM objectives WHERE org_id = ? ORDER BY created_at DESC').bind(data.auth.org.id).all().then((r) => r.results),
     ]);
     const objectives = await Promise.all(objectivesRaw.map(async (o) => ({ ...o, ...(await computeObjective(env.DB, o)) })));
 
