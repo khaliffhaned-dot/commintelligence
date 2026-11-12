@@ -3104,7 +3104,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const mix = d.sentimentMix;
             const tagged = mix.Positive + mix.Neutral + mix.Negative;
             const net = DASH_NS(mix.Positive, mix.Negative, tagged);
-            const delta = d.articlesPrev24h ? Math.round(((d.articles24h - d.articlesPrev24h) / d.articlesPrev24h) * 100) : null;
+            // Only compare with the previous day once we have collected for two full days; before that it is not a fair comparison.
+            const hasPriorDay = !!d.collectingSince && d.collectingSince <= d.generatedAt - 2 * 86400;
+            const delta = hasPriorDay && d.articlesPrev24h ? Math.round(((d.articles24h - d.articlesPrev24h) / d.articlesPrev24h) * 100) : null;
 
             // Party roll-up
             const partyRows = ['BN', 'PH', 'PN', 'GPS', 'GRS'].map(code => {
@@ -3147,7 +3149,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ${d.quality.total ? '' : `<div class="card" style="margin-bottom:1.5rem;"><div class="card__body"><strong>No coverage collected yet.</strong> Click <em>Pull latest</em> to fetch Malaysian news.</div></div>`}
 
                 <div class="kpi-grid">
-                    ${kpi('Articles · last 24h', String(d.articles24h), delta === null ? 'no prior day to compare' : `${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)}% vs previous 24h`)}
+                    ${kpi('Articles · last 24h', String(d.articles24h), delta === null ? 'comparison available after 2 days of data' : `${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)}% vs previous 24h`)}
                     ${kpi('Net sentiment · 7 days', net === null ? '—' : (net > 0 ? '+' : '') + net, `${tagged} tagged articles`, netTone)}
                     ${kpi('Most covered party', topParty && topParty.total ? escapeHtml(topParty.code) : '—', topParty && topParty.total ? `${topParty.total} articles` : 'no political coverage yet')}
                     ${kpi('Objectives met', d.objectives.total ? `${d.objectives.met}/${d.objectives.total}` : '—', d.objectives.total ? (d.objectives.behind ? `${d.objectives.behind} behind target` : 'none behind target') : 'set one under Measure')}

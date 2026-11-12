@@ -8,6 +8,7 @@ export async function onRequestGet({ env, data }) {
     const one = (sql, ...a) => env.DB.prepare(sql).bind(...a).first();
     const all = (sql, ...a) => env.DB.prepare(sql).bind(...a).all().then((r) => r.results);
 
+    const since = await one('SELECT MIN(fetched_at) AS t FROM items');
     const [last24, prev24, mix, parties, trend, sectors, latest, sources, lastPull, quality, objectivesRaw] = await Promise.all([
         one('SELECT COUNT(*) AS n FROM items WHERE published_at >= ?', d1),
         one('SELECT COUNT(*) AS n FROM items WHERE published_at >= ? AND published_at < ?', d2, d1),
@@ -25,6 +26,7 @@ export async function onRequestGet({ env, data }) {
 
     return json({
         generatedAt: now,
+        collectingSince: since && since.t ? since.t : null,
         articles24h: last24.n,
         articlesPrev24h: prev24.n,
         sentimentMix: Object.fromEntries(['Positive', 'Neutral', 'Negative'].map((s) => [s, (mix.find((r) => r.sentiment === s) || {}).n || 0])),
