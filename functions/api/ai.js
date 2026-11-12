@@ -49,7 +49,8 @@ export async function onRequestPost({ request, env }) {
             }),
         });
     } catch (e) {
-        return json({ error: `Failed to reach Hunyuan API: ${e.message}` }, 502);
+        console.error('Hunyuan fetch failed', e.message);
+        return json({ error: 'Failed to reach the Hunyuan API. Check HUNYUAN_BASE_URL is a full https:// URL.' }, 502);
     }
     if (!response.ok) {
         console.error('Hunyuan error', response.status, await response.text());
