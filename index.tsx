@@ -27,6 +27,9 @@ function ensureTcbAuth(): Promise<any> {
  * chat completions endpoint server-side and returns the parsed JSON object.
  */
 async function generateJson(prompt: string, imageParts?: { mimeType: string, data: string }[]): Promise<any> {
+    if (!process.env.TCB_ENV_ID) {
+        throw new Error('AI backend is not configured: TCB_ENV_ID was not set when this app was built. Set it in .env.local (local) or as a build environment variable (hosting), then rebuild.');
+    }
     await ensureTcbAuth();
 
     const { result } = await tcbApp.callFunction({
@@ -34,7 +37,10 @@ async function generateJson(prompt: string, imageParts?: { mimeType: string, dat
         data: { prompt, imageParts },
     });
 
-    if (result?.error) {
+    if (!result) {
+        throw new Error('The hunyuanProxy cloud function returned no response. Check that it is deployed.');
+    }
+    if (result.error) {
         throw new Error(result.error);
     }
     return result.result;
