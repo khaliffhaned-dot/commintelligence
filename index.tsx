@@ -837,13 +837,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button class="toggle-btn" data-channel="social" type="button">Social &amp; forums</button>
                 </div>
                 <div class="form-group" style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
-                    <select id="feed-filter-sector" class="form-select" style="max-width:260px;">${opt(INTEL_SECTORS, 'All sectors')}</select>
-                    <select id="feed-filter-party" class="form-select" style="max-width:220px;">
+                    <select id="feed-filter-sector" aria-label="Filter by sector" class="form-select" style="max-width:260px;">${opt(INTEL_SECTORS, 'All sectors')}</select>
+                    <select id="feed-filter-party" aria-label="Filter by party" class="form-select" style="max-width:220px;">
                         <option value="">All parties</option>
                         ${Object.keys(INTEL_PARTIES).map(k => `<option value="${k}">${INTEL_PARTIES[k]}</option>`).join('')}
                     </select>
-                    <select id="feed-filter-sentiment" class="form-select" style="max-width:200px;">${opt(['Positive', 'Neutral', 'Negative'], 'Any sentiment')}</select>
-                    <select id="feed-filter-audience" class="form-select" style="max-width:240px;">${opt(INTEL_AUDIENCES, 'All stakeholder audiences')}</select>
+                    <select id="feed-filter-sentiment" aria-label="Filter by sentiment" class="form-select" style="max-width:200px;">${opt(['Positive', 'Neutral', 'Negative'], 'Any sentiment')}</select>
+                    <select id="feed-filter-audience" aria-label="Filter by stakeholder audience" class="form-select" style="max-width:240px;">${opt(INTEL_AUDIENCES, 'All stakeholder audiences')}</select>
                 </div>
                 <div class="signal-feed-column" id="intel-feed-list"></div>
             `;
@@ -2285,7 +2285,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p class="text-secondary">Aligned to AMEC Barcelona Principles V4.0. Measured on real coverage over the last ${report.days} days, with no advertising value equivalents (AVEs).</p>
                     </div>
                     <div style="display:flex; gap:0.75rem;">
-                        <select id="measure-days" class="form-select">
+                        <select id="measure-days" aria-label="Reporting period" class="form-select">
                             ${[7, 30, 90].map(d => `<option value="${d}" ${d === report.days ? 'selected' : ''}>Last ${d} days</option>`).join('')}
                         </select>
                         <button id="export-measure-pdf-button" class="btn btn--secondary">Export as PDF</button>
@@ -2295,15 +2295,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="card" style="margin-bottom:1.5rem;">
                         <div class="card__header"><h3>1 · Set a measurable objective</h3></div>
                         <div class="card__body">
-                            <div class="form-group"><label>Objective name</label><input id="obj-name" class="form-input" maxlength="120" placeholder="e.g. Keep PH net sentiment above 0 among investors" /></div>
+                            <div class="form-group"><label for="obj-name">Objective name</label><input id="obj-name" class="form-input" maxlength="120" placeholder="e.g. Keep PH net sentiment above 0 among investors" /></div>
                             <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:0.75rem;">
-                                <div class="form-group"><label>Metric</label><select id="obj-metric" class="form-select">${Object.keys(MEASURE_METRICS).map(k => `<option value="${k}">${MEASURE_METRICS[k]}</option>`).join('')}</select></div>
-                                <div class="form-group"><label>Goal</label><select id="obj-comparator" class="form-select"><option value="atleast">At least</option><option value="atmost">At most</option></select></div>
-                                <div class="form-group"><label>Target</label><input id="obj-target" type="number" class="form-input" value="50" /></div>
-                                <div class="form-group"><label>Window (days)</label><input id="obj-days" type="number" min="1" max="90" class="form-input" value="30" /></div>
-                                <div class="form-group"><label>Party (optional)</label><select id="obj-party" class="form-select">${optionList(Object.keys(INTEL_PARTIES), 'Any')}</select></div>
-                                <div class="form-group"><label>Sector (optional)</label><select id="obj-sector" class="form-select">${optionList(INTEL_SECTORS, 'Any')}</select></div>
-                                <div class="form-group"><label>Stakeholder audience (optional)</label><select id="obj-audience" class="form-select">${optionList(INTEL_AUDIENCES, 'Any')}</select></div>
+                                <div class="form-group"><label for="obj-metric">Metric</label><select id="obj-metric" class="form-select">${Object.keys(MEASURE_METRICS).map(k => `<option value="${k}">${MEASURE_METRICS[k]}</option>`).join('')}</select></div>
+                                <div class="form-group"><label for="obj-comparator">Goal</label><select id="obj-comparator" class="form-select"><option value="atleast">At least</option><option value="atmost">At most</option></select></div>
+                                <div class="form-group"><label for="obj-target">Target</label><input id="obj-target" type="number" class="form-input" value="50" /></div>
+                                <div class="form-group"><label for="obj-days">Window (days)</label><input id="obj-days" type="number" min="1" max="90" class="form-input" value="30" /></div>
+                                <div class="form-group"><label for="obj-party">Party (optional)</label><select id="obj-party" class="form-select">${optionList(Object.keys(INTEL_PARTIES), 'Any')}</select></div>
+                                <div class="form-group"><label for="obj-sector">Sector (optional)</label><select id="obj-sector" class="form-select">${optionList(INTEL_SECTORS, 'Any')}</select></div>
+                                <div class="form-group"><label for="obj-audience">Stakeholder audience (optional)</label><select id="obj-audience" class="form-select">${optionList(INTEL_AUDIENCES, 'Any')}</select></div>
                             </div>
                             <button id="obj-add" class="btn btn--primary" style="margin-top:0.75rem;">Add objective</button>
                             <span id="obj-msg" class="text-secondary" style="margin-left:0.75rem;"></span>
@@ -2741,7 +2741,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="view-header"><div><h2>${title}</h2><p class="text-secondary">${subtitle}</p></div></div>
                 <div class="card" style="margin-bottom:1rem;"><div class="card__body">
                     <form class="coverage-form" novalidate>
-                        <input class="form-input coverage-input" maxlength="80" placeholder="Person, company or topic" value="${escapeHtml(preset)}">
+                        <input class="form-input coverage-input" aria-label="Person, company or topic to search" maxlength="80" placeholder="Person, company or topic" value="${escapeHtml(preset)}">
                         <button class="btn btn--primary" type="submit">Search coverage</button>
                     </form>
                 </div></div>
@@ -2773,7 +2773,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // --- ACCOUNTS: sign-in screen, session check, user menu ---
+        let closeActiveAuth: (() => void) | null = null;
         function showAuthOverlay(onSuccess: () => void) {
+            closeActiveAuth?.();
             document.getElementById('auth-overlay')?.remove();
             // The last mode used is remembered, so the site owner lands on the passcode box every time.
             const saved = (() => { try { return localStorage.getItem('authMode'); } catch { return null; } })();
@@ -2781,6 +2783,29 @@ document.addEventListener('DOMContentLoaded', () => {
             const overlay = document.createElement('div');
             overlay.id = 'auth-overlay';
             document.body.appendChild(overlay);
+
+            // Make the page behind the dialog inert (not focusable or readable), trap Tab inside, and let Escape close it.
+            const trigger = document.activeElement as HTMLElement | null;
+            const behind = ['landing-page', 'app-container'].map(id => document.getElementById(id)).filter(Boolean) as HTMLElement[];
+            behind.forEach(el => el.setAttribute('inert', ''));
+            const onKey = (e: KeyboardEvent) => {
+                if (e.key === 'Escape') { e.preventDefault(); closeOverlay(true); return; }
+                if (e.key !== 'Tab') return;
+                const items = Array.from(overlay.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select,textarea')).filter(el => el.offsetParent !== null);
+                if (!items.length) return;
+                const first = items[0], last = items[items.length - 1];
+                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+            };
+            const closeOverlay = (restoreFocus = false) => {
+                behind.forEach(el => el.removeAttribute('inert'));
+                document.removeEventListener('keydown', onKey, true);
+                overlay.remove();
+                closeActiveAuth = null;
+                if (restoreFocus) trigger?.focus();
+            };
+            document.addEventListener('keydown', onKey, true);
+            closeActiveAuth = () => closeOverlay(false);
 
             const titles = { login: 'Sign in to PRVAIL', signup: 'Create your account', admin: 'Admin access' };
             const blurbs = {
@@ -2807,9 +2832,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <button id="auth-submit" class="btn btn--primary" type="submit" style="width:100%;">${admin ? 'Enter' : signup ? 'Create account' : 'Sign in'}</button>
                             </form>
                             <p class="auth-links">
-                                ${mode !== 'login' ? '<a href="#" data-mode="login">Sign in with email</a>' : ''}
-                                ${mode !== 'signup' ? '<a href="#" data-mode="signup">Create an account</a>' : ''}
-                                ${mode !== 'admin' ? '<a href="#" data-mode="admin">Admin passcode</a>' : ''}
+                                ${mode !== 'login' ? '<button type="button" class="link-button" data-mode="login">Sign in with email</button>' : ''}
+                                ${mode !== 'signup' ? '<button type="button" class="link-button" data-mode="signup">Create an account</button>' : ''}
+                                ${mode !== 'admin' ? '<button type="button" class="link-button" data-mode="admin">Admin passcode</button>' : ''}
                             </p>
                         </div>
                     </div>`;
@@ -2839,7 +2864,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (!res.ok || data.error) { err.textContent = data.error || 'Something went wrong. Try again.'; btn.disabled = false; return; }
                         authState.user = data.user; authState.org = data.org; authState.role = data.role;
                         try { localStorage.setItem('authMode', mode); } catch { /* not remembered */ }
-                        overlay.remove();
+                        closeOverlay(false);
                         onSuccess();
                     } catch {
                         err.textContent = 'Could not reach the server. Check your connection and try again.';
@@ -2922,6 +2947,24 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        /** Makes the sidebar usable by keyboard and assistive tech: focusable, Enter/Space to operate, expanded and current states. */
+        function enhanceNavAccessibility() {
+            document.querySelectorAll<HTMLElement>('.nav-item').forEach(item => {
+                if (!item.hasAttribute('tabindex')) item.setAttribute('tabindex', '0');
+                if (!item.getAttribute('role')) item.setAttribute('role', 'button');
+                item.setAttribute('aria-expanded', item.classList.contains('open') ? 'true' : 'false');
+                if (!item.dataset.kbd) {
+                    item.dataset.kbd = '1';
+                    item.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); } });
+                    item.addEventListener('click', () => setTimeout(enhanceNavAccessibility, 0)); // refresh aria-expanded after the toggle runs
+                }
+            });
+            document.querySelectorAll<HTMLElement>('.sub-nav-item').forEach(link => {
+                if (!link.hasAttribute('href')) link.setAttribute('href', '#'); // makes it a real, focusable link; clicks already preventDefault
+                if (link.classList.contains('active')) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+            });
+        }
+
         function updateSidebar(activeView: string) {
             document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active-parent', 'open'));
             document.querySelectorAll('.sub-nav-list').forEach(list => list.classList.remove('open'));
@@ -2939,6 +2982,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (activeView === 'clients-view') {
                 // No specific sidebar item is active for client management
             }
+            enhanceNavAccessibility();
         }
         
         function updateHeaderTitle(viewId: string) {
