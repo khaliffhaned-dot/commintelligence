@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRVAIL</title>
+    <title>PRVAIL · Communications Intelligence for Malaysia</title>
+    <meta name="description" content="Real Malaysian news coverage tagged by sector, coalition, sentiment and stakeholder audience, measured against clear objectives and aligned to the AMEC Barcelona Principles 4.0.">
     <link rel="stylesheet" href="index.css">
     <link rel="icon" href="https://assets.codepen.io/33946/prvail-logo-icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -15,84 +16,175 @@
         <header class="landing-header">
             <div class="landing-logo">PRVAIL</div>
             <nav class="landing-nav">
-                <button id="launch-button" class="btn btn--primary">
-                    Launch Dashboard
+                <a class="landing-nav__link" href="#how">How it works</a>
+                <a class="landing-nav__link" href="#modules">Modules</a>
+                <a class="landing-nav__link" href="#measurement">Measurement</a>
+                <a class="landing-nav__link" href="#trust">Trust</a>
+                <button id="launch-button" class="btn btn--primary" data-launch>
+                    Sign in
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                 </button>
             </nav>
         </header>
+
         <main class="landing-hero">
-            <h1 class="hero-headline">The New Standard in <span class="ai-highlight">Communications Intelligence</span> for Malaysia</h1>
-            <p class="hero-subheadline">PRVAIL is a specialized intelligence platform for Public Relations and Corporate Affairs professionals. Our methodology empowers you to Listen, Understand, Predict, and Influence.</p>
+            <p class="section-kicker">Communications intelligence for Malaysia</p>
+            <h1 class="hero-headline">See Malaysia's conversation <span class="ai-highlight">clearly</span>, and prove your impact</h1>
+            <p class="hero-subheadline">PRVAIL gives PR and corporate-affairs teams real Malaysian news coverage, tagged by sector, coalition, sentiment and stakeholder audience, and measures your results against clear objectives, the way the AMEC Barcelona Principles recommend.</p>
+            <div class="hero-cta">
+                <button class="btn btn--primary btn--lg" data-launch>Open the dashboard</button>
+                <a class="btn btn--secondary btn--lg" href="#how">See how it works</a>
+            </div>
+            <p class="hero-note">Real articles, linked to their source. AI tags are labelled. No advertising value equivalents (AVEs).</p>
         </main>
-         <section class="landing-features">
+
+        <section class="stats-strip" aria-label="At a glance">
+            <div class="stat"><div class="stat__value">15</div><div class="stat__label">Malaysian sectors tracked</div></div>
+            <div class="stat"><div class="stat__value">5</div><div class="stat__label">Coalitions: BN, PH, PN, GPS, GRS</div></div>
+            <div class="stat"><div class="stat__value">7</div><div class="stat__label">Barcelona Principles mapped</div></div>
+            <div class="stat"><div class="stat__value">0</div><div class="stat__label">AVEs, by design</div></div>
+        </section>
+
+        <section class="landing-section" id="how">
             <div class="features-inner-container">
-                <h2 class="features-headline">A Complete Intelligence Toolkit</h2>
-                <p class="features-subheadline">PRVAIL is composed of six integrated modules, each designed to address a specific function within the modern Malaysian PR workflow.</p>
+                <p class="section-kicker">How it works</p>
+                <h2 class="features-headline">From headlines to a report you can defend</h2>
+                <p class="features-subheadline">Four steps, and every number traces back to a real article.</p>
+                <div class="how-grid">
+                    <div class="how-step"><div class="how-step__num">1</div><h3>Collect</h3><p>Pulls headlines from Malaysian news outlets. YouTube comments and Reddit can be connected when you are ready.</p></div>
+                    <div class="how-step"><div class="how-step__num">2</div><h3>Tag</h3><p>AI labels each item by sector, coalition, sentiment and stakeholder audience. You can check every tag against the original headline.</p></div>
+                    <div class="how-step"><div class="how-step__num">3</div><h3>Measure</h3><p>Set measurable objectives and report outputs, outcomes and impact for your organisation.</p></div>
+                    <div class="how-step"><div class="how-step__num">4</div><h3>Act</h3><p>Use the AI drafting tools for campaigns, crisis plans and policy scenarios, then review before you use them.</p></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-features" id="modules">
+            <div class="features-inner-container">
+                <p class="section-kicker">Modules</p>
+                <h2 class="features-headline">One workspace, eight modules</h2>
+                <p class="features-subheadline">Modules marked <span class="ai-badge">AI-assisted</span> produce drafts for human review, not final answers.</p>
                 <div class="features-grid">
                     <div class="feature-card">
                         <div class="feature-card__header">
-                            <div class="feature-card__icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hearing"><path d="M4.5 12H2a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h2.5"/><path d="M15 13.1c.9-1.3 1.5-2.9 1.5-4.6 0-4.1-3.3-7.5-7.5-7.5S1.5 4.4 1.5 8.5c0 1.7.6 3.3 1.5 4.6L7 17v3.5a1.5 1.5 0 0 0 3 0V17l3.5-3.9Z"/><path d="M12.5 6.5A2.5 2.5 0 0 1 15 9"/><path d="M18.5 3.5A6.5 6.5 0 0 1 22 10"/></svg>
-                            </div>
-                             <span class="feature-card__tag">Listen</span>
+                            <div class="feature-card__icon"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12H2a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h2.5"/><path d="M15 13.1c.9-1.3 1.5-2.9 1.5-4.6 0-4.1-3.3-7.5-7.5-7.5S1.5 4.4 1.5 8.5c0 1.7.6 3.3 1.5 4.6L7 17v3.5a1.5 1.5 0 0 0 3 0V17l3.5-3.9Z"/><path d="M12.5 6.5A2.5 2.5 0 0 1 15 9"/><path d="M18.5 3.5A6.5 6.5 0 0 1 22 10"/></svg></div>
+                            <span class="feature-card__tag">Listen</span>
                         </div>
-                        <h3 class="feature-card__title">Signal: The Real-Time Intelligence Engine</h3>
-                        <p class="feature-card__description">Taps into every conceivable Malaysian digital channel to capture the complete signal, using AI to analyze text, images, and video, and instantly alerting PR teams to emerging trends or nascent crises.</p>
+                        <h3 class="feature-card__title">Signal: live Malaysian coverage</h3>
+                        <p class="feature-card__description">A live feed of Malaysian news tagged by sector, coalition, sentiment and stakeholder audience, with filters and a link to every original article. Add YouTube comments and Reddit when connected.</p>
                     </div>
                     <div class="feature-card">
                         <div class="feature-card__header">
-                            <div class="feature-card__icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield-check"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                            </div>
+                            <div class="feature-card__icon"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></div>
                             <span class="feature-card__tag">Understand</span>
                         </div>
-                        <h3 class="feature-card__title">Veritas: The Narrative Integrity Shield</h3>
-                        <p class="feature-card__description">Goes beyond simple fact-checking to detect multi-modal disinformation and 'fitnah' that can spread rapidly in the Malaysian social fabric, mapping its origin and predicting future threats for pre-emptive counter-messaging.</p>
+                        <h3 class="feature-card__title">NusaPulse: sector and party sentiment</h3>
+                        <p class="feature-card__description">See how coverage is trending across sectors and across BN, PH, PN, GPS and GRS, with the headlines behind each chart. It reflects media coverage, not opinion polls.</p>
                     </div>
                     <div class="feature-card">
-                         <div class="feature-card__header">
-                            <div class="feature-card__icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map-pin"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                            </div>
-                            <span class="feature-card__tag">Listen & Understand</span>
+                        <div class="feature-card__header">
+                            <div class="feature-card__icon"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg></div>
+                            <span class="feature-card__tag">Measure</span>
                         </div>
-                        <h3 class="feature-card__title">NusaPulse: Hyperlocal Intelligence Dashboard</h3>
-                        <p class="feature-card__description">A live, interactive dashboard for monitoring real-time sentiment, media buzz, and trending topics across the entire Malaysian landscape, with drill-down capabilities for every state and major urban center.</p>
+                        <h3 class="feature-card__title">Measure: objectives and impact</h3>
+                        <p class="feature-card__description">Set measurable objectives and track them against real coverage. Report outputs, outcomes and impact, and export a PDF for your client.</p>
                     </div>
                     <div class="feature-card">
-                         <div class="feature-card__header">
-                            <div class="feature-card__icon">
-                                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-landmark"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
-                            </div>
-                            <span class="feature-card__tag">Understand & Predict</span>
+                        <div class="feature-card__header">
+                            <div class="feature-card__icon"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div>
+                            <span class="feature-card__tag">Understand <span class="ai-badge">AI-assisted</span></span>
                         </div>
-                        <h3 class="feature-card__title">Nexus: The Policy & Stakeholder Forecaster</h3>
-                        <p class="feature-card__description">Automates the monitoring of Malaysian legislative and governmental affairs, using AI to summarize complex policy, predict its impact, and map key stakeholders for strategic government relations.</p>
+                        <h3 class="feature-card__title">Veritas: narrative integrity</h3>
+                        <p class="feature-card__description">AI-assisted checks on claims, images and video to help you spot misleading content and 'fitnah' early. Treat results as leads to verify, not verdicts.</p>
                     </div>
                     <div class="feature-card">
-                         <div class="feature-card__header">
-                            <div class="feature-card__icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-siren"><path d="M12 2c-.3 0-.6.1-.8.2-.5.3-.8.8-.9 1.3l-2.5 9.1c-.2.5-.1 1.1.1 1.6.3.5.7.9 1.2 1.1l.2.1h0c.2.1.4.1.6.1h6.2c.2 0 .4 0 .6-.1h0l.2-.1c.5-.2.9-.6 1.2-1.1.3-.5.3-1.1.1-1.6l-2.5-9.1c-.1-.5-.4-1-.9-1.3C12.6 2.1 12.3 2 12 2Z"/><path d="M6 16.5c-2-1.5-3-4-2-7"/><path d="M18 16.5c2-1.5 3-4 2-7"/><path d="M12 22v-3"/><path d="M8 22h8"/></svg>
-                            </div>
-                            <span class="feature-card__tag">Predict & Influence</span>
+                        <div class="feature-card__header">
+                            <div class="feature-card__icon"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg></div>
+                            <span class="feature-card__tag">Prepare <span class="ai-badge">AI-assisted</span></span>
                         </div>
-                        <h3 class="feature-card__title">Aegis: The Reputation Command & Crisis AI</h3>
-                        <p class="feature-card__description">Provides a predictive, real-time reputation score (measuring brand 'maruah' or dignity), offers AI-powered crisis simulations tailored to the Malaysian context, and instantly generates first-response communication plans.</p>
+                        <h3 class="feature-card__title">Nexus: policy and stakeholders</h3>
+                        <p class="feature-card__description">Draft policy-impact scenarios and stakeholder maps to prepare government-relations conversations.</p>
                     </div>
                     <div class="feature-card">
-                         <div class="feature-card__header">
-                            <div class="feature-card__icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-megaphone"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
-                            </div>
-                            <span class="feature-card__tag">Influence</span>
+                        <div class="feature-card__header">
+                            <div class="feature-card__icon"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c-.3 0-.6.1-.8.2-.5.3-.8.8-.9 1.3l-2.5 9.1c-.2.5-.1 1.1.1 1.6.3.5.7.9 1.2 1.1l.2.1h0c.2.1.4.1.6.1h6.2c.2 0 .4 0 .6-.1h0l.2-.1c.5-.2.9-.6 1.2-1.1.3-.5.3-1.1.1-1.6l-2.5-9.1c-.1-.5-.4-1-.9-1.3C12.6 2.1 12.3 2 12 2Z"/><path d="M6 16.5c-2-1.5-3-4-2-7"/><path d="M18 16.5c2-1.5 3-4 2-7"/><path d="M12 22v-3"/><path d="M8 22h8"/></svg></div>
+                            <span class="feature-card__tag">Prepare <span class="ai-badge">AI-assisted</span></span>
                         </div>
-                        <h3 class="feature-card__title">Amplify: The Strategic Influence & Comms Suite</h3>
-                        <p class="feature-card__description">Builds psychographic audience segments of the Malaysian population, recommends high-impact content themes, assists in crafting resonant copy, and identifies key local journalists and influencers (KOLs).</p>
+                        <h3 class="feature-card__title">Aegis: reputation and crisis planning</h3>
+                        <p class="feature-card__description">Scenario planning and first-response drafts for crisis moments, written with the Malaysian context in mind.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-card__header">
+                            <div class="feature-card__icon"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg></div>
+                            <span class="feature-card__tag">Influence <span class="ai-badge">AI-assisted</span></span>
+                        </div>
+                        <h3 class="feature-card__title">Amplify: campaigns and comms</h3>
+                        <p class="feature-card__description">Campaign structure, key messages and press and social drafts, so you reach a first version faster.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-card__header">
+                            <div class="feature-card__icon"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></div>
+                            <span class="feature-card__tag">Verify <span class="ai-badge">AI-assisted</span></span>
+                        </div>
+                        <h3 class="feature-card__title">Due Diligence: entity vetting</h3>
+                        <p class="feature-card__description">AI-assisted screening notes on companies and people, to help you decide what to check by hand.</p>
                     </div>
                 </div>
             </div>
         </section>
+
+        <section class="landing-section" id="malaysia">
+            <div class="features-inner-container two-col">
+                <div>
+                    <p class="section-kicker">Built for Malaysia</p>
+                    <h2 class="features-headline" style="text-align:left;">Local context, not a global template</h2>
+                    <p class="features-subheadline" style="text-align:left; margin-left:0;">Malaysian PR is shaped by coalitions, sectors and languages that generic tools were not built around.</p>
+                </div>
+                <ul class="check-list">
+                    <li><strong>Coalition-aware.</strong> Coverage is organised around BN, PH, PN, GPS and GRS, not a single left-right scale.</li>
+                    <li><strong>Sector-aware.</strong> Fifteen sectors, from banking and plantation to energy, telecom, property and tourism.</li>
+                    <li><strong>Reads English and Malay headlines.</strong> Tagging handles both. Accuracy is never perfect, so every tag sits next to its source.</li>
+                    <li><strong>Stakeholder audiences.</strong> Government, business, investors, consumers, civil society and workforce, as the first principle of good measurement asks.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="landing-features" id="measurement">
+            <div class="features-inner-container">
+                <p class="section-kicker">Measurement you can defend</p>
+                <h2 class="features-headline">Aligned to the Barcelona Principles 4.0</h2>
+                <p class="features-subheadline">AMEC's principles are the industry's reference for communications measurement. PRVAIL is built around them.</p>
+                <div class="principles-grid">
+                    <div class="principle"><strong>Objectives first.</strong> Set a measurable goal before you measure.</div>
+                    <div class="principle"><strong>Stakeholder audiences.</strong> Know who you are trying to reach.</div>
+                    <div class="principle"><strong>Quantitative and qualitative.</strong> Numbers sit beside the headlines behind them.</div>
+                    <div class="principle"><strong>No AVEs.</strong> Advertising value equivalents are never used.</div>
+                    <div class="principle"><strong>Outputs, outcomes, impact.</strong> Report all three, exportable as PDF.</div>
+                    <div class="principle"><strong>Transparency.</strong> Sources, AI use and limits are disclosed on a methodology page.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section" id="trust">
+            <div class="features-inner-container">
+                <p class="section-kicker">Trust and transparency</p>
+                <h2 class="features-headline">Clear about what it knows, and what it doesn't</h2>
+                <div class="trust-grid">
+                    <div class="trust-card"><h3>Every number has a source</h3><p>Each article links to the original. Nothing is invented to fill a chart.</p></div>
+                    <div class="trust-card"><h3>AI is labelled</h3><p>Tags and drafts are marked as AI-assisted. Review before you rely on them.</p></div>
+                    <div class="trust-card"><h3>Private workspaces</h3><p>Each organisation's objectives and settings are kept separate behind sign-in.</p></div>
+                    <div class="trust-card"><h3>Data minimised</h3><p>No author names are stored from social sources, and social posts are deleted after 14 days.</p></div>
+                </div>
+                <p class="coverage-note"><strong>Coverage today:</strong> online news from Malaysian outlets, plus YouTube comments and Reddit when connected. Facebook, TikTok, X, WhatsApp and broadcast are not covered, so results are not the whole conversation.</p>
+            </div>
+        </section>
+
+        <section class="cta-band">
+            <h2>Ready to see Malaysia's conversation clearly?</h2>
+            <p>Sign in to open the dashboard.</p>
+            <button class="btn btn--primary btn--lg" data-launch>Open the dashboard</button>
+        </section>
+
         <footer class="landing-footer">
             <div class="footer-links">
                 <a href="#" id="terms-link" role="button">Terms of Service</a>

@@ -16,6 +16,7 @@ export async function onRequestPost({ request, env }) {
     const name = String(b.name || '').trim().slice(0, 80);
     const orgName = String(b.orgName || '').trim().slice(0, 80);
     if (!validEmail(email)) return json({ error: 'Enter a valid email address.' }, 400);
+    if (email.endsWith('@prvail.local')) return json({ error: 'That email domain is reserved.' }, 400);
     if (password.length < 10) return json({ error: 'Password must be at least 10 characters.' }, 400);
     if (password.length > 200) return json({ error: 'Password is too long.' }, 400);
     if (orgName.length < 2) return json({ error: 'Enter your organisation name.' }, 400);

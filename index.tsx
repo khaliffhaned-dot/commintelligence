@@ -3349,31 +3349,51 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- ACCOUNTS: sign-in screen, session check, user menu ---
         function showAuthOverlay(onSuccess: () => void) {
             document.getElementById('auth-overlay')?.remove();
-            let mode: 'login' | 'signup' = 'login';
+            // The last mode used is remembered, so the site owner lands on the passcode box every time.
+            const saved = (() => { try { return localStorage.getItem('authMode'); } catch { return null; } })();
+            let mode: 'login' | 'signup' | 'admin' = saved === 'admin' || saved === 'signup' ? saved : 'login';
             const overlay = document.createElement('div');
             overlay.id = 'auth-overlay';
             document.body.appendChild(overlay);
 
+            const titles = { login: 'Sign in to PRVAIL', signup: 'Create your account', admin: 'Admin access' };
+            const blurbs = {
+                login: 'Welcome back.',
+                signup: 'Your organisation gets its own private workspace.',
+                admin: 'Enter the admin passcode. This device will be remembered for 30 days.',
+            };
+
             const render = () => {
                 const signup = mode === 'signup';
+                const admin = mode === 'admin';
                 overlay.innerHTML = `
                     <div class="auth-card card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
                         <div class="card__body">
-                            <h2 id="auth-title">${signup ? 'Create your account' : 'Sign in to PRVAIL'}</h2>
-                            <p class="text-secondary">${signup ? 'Your organisation gets its own private workspace.' : 'Welcome back.'}</p>
+                            <h2 id="auth-title">${titles[mode]}</h2>
+                            <p class="text-secondary">${blurbs[mode]}</p>
                             <form id="auth-form" novalidate>
+                                ${admin ? '<div class="form-group"><label for="auth-passcode">Passcode</label><input id="auth-passcode" type="password" class="form-input" autocomplete="off" inputmode="numeric" required></div>' : ''}
                                 ${signup ? '<div class="form-group"><label for="auth-name">Your name</label><input id="auth-name" class="form-input" autocomplete="name" maxlength="80"></div><div class="form-group"><label for="auth-org">Organisation</label><input id="auth-org" class="form-input" autocomplete="organization" maxlength="80" required></div>' : ''}
-                                <div class="form-group"><label for="auth-email">Email</label><input id="auth-email" type="email" class="form-input" autocomplete="email" required></div>
-                                <div class="form-group"><label for="auth-password">Password</label><input id="auth-password" type="password" class="form-input" autocomplete="${signup ? 'new-password' : 'current-password'}" required>${signup ? '<small class="text-secondary">At least 10 characters.</small>' : ''}</div>
+                                ${admin ? '' : '<div class="form-group"><label for="auth-email">Email</label><input id="auth-email" type="email" class="form-input" autocomplete="email" required></div>'}
+                                ${admin ? '' : `<div class="form-group"><label for="auth-password">Password</label><input id="auth-password" type="password" class="form-input" autocomplete="${signup ? 'new-password' : 'current-password'}" required>${signup ? '<small class="text-secondary">At least 10 characters.</small>' : ''}</div>`}
                                 ${signup ? '<div class="form-group"><label for="auth-code">Invite code <span class="text-secondary">(if you were given one)</span></label><input id="auth-code" class="form-input" autocomplete="off"></div>' : ''}
                                 <p id="auth-error" class="error-message" role="alert" style="min-height:1.2em;"></p>
-                                <button id="auth-submit" class="btn btn--primary" type="submit" style="width:100%;">${signup ? 'Create account' : 'Sign in'}</button>
+                                <button id="auth-submit" class="btn btn--primary" type="submit" style="width:100%;">${admin ? 'Enter' : signup ? 'Create account' : 'Sign in'}</button>
                             </form>
-                            <p style="margin-top:1rem; text-align:center;"><a href="#" id="auth-toggle">${signup ? 'Already have an account? Sign in' : 'New here? Create an account'}</a></p>
+                            <p class="auth-links">
+                                ${mode !== 'login' ? '<a href="#" data-mode="login">Sign in with email</a>' : ''}
+                                ${mode !== 'signup' ? '<a href="#" data-mode="signup">Create an account</a>' : ''}
+                                ${mode !== 'admin' ? '<a href="#" data-mode="admin">Admin passcode</a>' : ''}
+                            </p>
                         </div>
                     </div>`;
-                document.getElementById('auth-toggle')!.addEventListener('click', (e) => { e.preventDefault(); mode = signup ? 'login' : 'signup'; render(); });
-                (document.getElementById(signup ? 'auth-name' : 'auth-email') as HTMLInputElement | null)?.focus();
+                overlay.querySelectorAll('[data-mode]').forEach(a => a.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    mode = (a as HTMLElement).dataset.mode as typeof mode;
+                    try { localStorage.setItem('authMode', mode); } catch { /* not remembered */ }
+                    render();
+                }));
+                (document.getElementById(admin ? 'auth-passcode' : signup ? 'auth-name' : 'auth-email') as HTMLInputElement | null)?.focus();
                 document.getElementById('auth-form')!.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     const val = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value || '';
@@ -3382,15 +3402,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     err.textContent = '';
                     btn.disabled = true;
                     try {
-                        const res = await apiFetch(signup ? '/api/auth/signup' : '/api/auth/login', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(signup
+                        const url = admin ? '/api/auth/admin' : signup ? '/api/auth/signup' : '/api/auth/login';
+                        const payload = admin
+                            ? { passcode: val('auth-passcode') }
+                            : signup
                                 ? { name: val('auth-name'), orgName: val('auth-org'), email: val('auth-email'), password: val('auth-password'), code: val('auth-code') }
-                                : { email: val('auth-email'), password: val('auth-password') }),
-                        });
+                                : { email: val('auth-email'), password: val('auth-password') };
+                        const res = await apiFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                         const data = await res.json();
                         if (!res.ok || data.error) { err.textContent = data.error || 'Something went wrong. Try again.'; btn.disabled = false; return; }
                         authState.user = data.user; authState.org = data.org; authState.role = data.role;
+                        try { localStorage.setItem('authMode', mode); } catch { /* not remembered */ }
                         overlay.remove();
                         onSuccess();
                     } catch {
@@ -3830,7 +3852,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             // Launch Button
-            document.getElementById('launch-button')?.addEventListener('click', async () => {
+            document.querySelectorAll('[data-launch]').forEach(btn => btn.addEventListener('click', async () => {
                 await ensureSignedIn();
                 landingPage?.classList.add('hidden');
                 appContainer?.classList.remove('hidden');
@@ -3838,7 +3860,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderUserMenu();
                 setupEventListeners(); // Re-attach listeners to the newly rendered DOM
                 initializeApp();
-            });
+            }));
             
             // Theme Toggle
             const themeToggleButton = document.getElementById('theme-toggle-button');
