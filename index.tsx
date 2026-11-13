@@ -834,7 +834,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="toggle-group" style="margin-bottom:1rem;" id="feed-channel-toggle">
                     <button class="toggle-btn active" data-channel="news" type="button">News</button>
-                    <button class="toggle-btn" data-channel="social" type="button">Social (YouTube &amp; Reddit)</button>
+                    <button class="toggle-btn" data-channel="social" type="button">Social &amp; forums</button>
                 </div>
                 <div class="form-group" style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
                     <select id="feed-filter-sector" class="form-select" style="max-width:260px;">${opt(INTEL_SECTORS, 'All sectors')}</select>
@@ -2222,6 +2222,32 @@ document.addEventListener('DOMContentLoaded', () => {
         const optionList = (items: string[], blank: string) => `<option value="">${blank}</option>` + items.map(i => `<option value="${escapeHtml(i)}">${escapeHtml(i)}</option>`).join('');
         let measureDays = 30;
 
+        /** Saved report snapshots kept in Cloudflare R2, so results can be shown over time. */
+        function setupSnapshots(container: HTMLElement) {
+            container.insertAdjacentHTML('beforeend', `<div class="card" style="margin-top:1.5rem;"><div class="card__header"><h3>Saved snapshots</h3></div><div class="card__body">
+                <p class="text-secondary">Keep a dated record of this report to show how results changed over time (Barcelona Principle 7, transparency).</p>
+                <button id="snapshot-save" class="btn btn--primary" type="button">Save snapshot</button> <span id="snapshot-msg" class="text-secondary"></span>
+                <ul id="snapshot-list" class="dash-list" style="margin-top:1rem;"></ul></div></div>`);
+            const list = document.getElementById('snapshot-list')!;
+            const msg = document.getElementById('snapshot-msg')!;
+            const load = async () => {
+                try {
+                    const r = await (await apiFetch('/api/snapshots')).json();
+                    if (r.error) throw new Error(r.error);
+                    list.innerHTML = (r.snapshots || []).map((s: any) => `<li><a href="/api/snapshots?key=${encodeURIComponent(s.key)}" target="_blank" rel="noopener noreferrer">${new Date(s.savedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</a> <span class="text-secondary">· ${s.articles} articles · ${s.objectivesMet}/${s.objectivesTotal} objectives met</span></li>`).join('') || '<li class="text-secondary">No snapshots yet.</li>';
+                } catch (e: any) { list.innerHTML = `<li class="error-message">${escapeHtml(e.message)}</li>`; }
+            };
+            document.getElementById('snapshot-save')?.addEventListener('click', async () => {
+                msg.textContent = 'Saving…';
+                try {
+                    const r = await (await apiFetch('/api/snapshots', { method: 'POST' })).json();
+                    msg.textContent = r.error ? r.error : 'Saved.';
+                } catch { msg.textContent = 'Could not save.'; }
+                load();
+            });
+            load();
+        }
+
         async function renderMeasureObjectivesView() {
             const container = document.getElementById('measure-objectives-view');
             if (!container) return;
@@ -2337,6 +2363,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderMeasureObjectivesView();
             });
 
+            setupSnapshots(container);
             if (appState.charts['measureSentiment']) appState.charts['measureSentiment'].destroy();
             const total = mix.Positive + mix.Neutral + mix.Negative;
             const chartEl = document.querySelector('#measure-sentiment-chart');
@@ -2362,7 +2389,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const principles = [
                 ['1', 'Set clear, measurable objectives', 'Measure → Objectives & Impact: objectives with a metric, target, scope and window, tracked against real coverage.', 'Supported'],
                 ['2', 'Define and understand stakeholder audiences', 'Each article is tagged with the stakeholder audience it chiefly concerns, filterable in the Live Feed and reported in Outcomes.', 'Supported (AI-tagged)'],
-                ['3', 'Measure all relevant channels', 'Online news (Free Malaysia Today, New Straits Times, Malaysiakini) plus YouTube comments and Reddit once an administrator enables them. Facebook, TikTok, X, WhatsApp and broadcast are not covered, so results are not the whole conversation.', 'Partial'],
+                ['3', 'Measure all relevant channels', 'Online news (Malaysian outlets and Google News Malaysia in four languages) plus YouTube comments and Reddit once an administrator enables them. Facebook, TikTok, X, WhatsApp and broadcast are not covered, so results are not the whole conversation.', 'Partial'],
                 ['4', 'Use qualitative and quantitative analysis', 'Counts, shares and sentiment (quantitative) sit alongside linked source headlines (qualitative). The qualitative read still needs a human analyst.', 'Partial'],
                 ['5', 'Do not use AVEs; judge by outcome and impact', 'The platform computes no advertising value equivalents. Impact is judged against your objectives, not a notional media price.', 'Supported'],
                 ['6', 'Report outputs, outcomes and impact', 'Measure → Objectives & Impact reports all three, exportable as PDF.', 'Supported'],
@@ -2378,7 +2405,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="card__body" style="overflow-x:auto;"><table class="measure-table"><thead><tr><th>#</th><th>Principle and how it is applied</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>
                 <div class="insights-grid">
                     <div class="card"><div class="card__header"><h3>Data and method</h3></div><div class="card__body"><div class="ai-report-section"><ul>
-                        <li><strong>Sources:</strong> RSS feeds from Free Malaysia Today, New Straits Times and Malaysiakini, each linked to the original article. Social: public YouTube comments and Reddit posts through their official APIs, when enabled. No author names are stored, and social posts are deleted after 14 days.</li>
+                        <li><strong>Sources:</strong> RSS feeds from Free Malaysia Today, New Straits Times, Malaysiakini and Google News Malaysia (English, Malay, Chinese and Tamil editions), each linked to the original article. Social: public YouTube comments and Reddit posts through their official APIs, when enabled. No author names are stored, and social posts are deleted after 14 days.</li>
                         <li><strong>GNews (optional):</strong> when enabled, Malaysian headlines in English, Chinese and Tamil (the service does not support Malay), delayed by up to 12 hours on its free plan. The free plan is for non-commercial use only.</li>
                         <li><strong>Pulling:</strong> on demand and while the Live Feed is open. There is no always-on collection yet, so gaps are possible.</li>
                         <li><strong>AI tagging:</strong> a Cloudflare Workers AI model (Llama 3.3 70B) assigns sector, party, sentiment and audience from the headline only, not the full text.</li>
@@ -2482,7 +2509,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="card dash-wide"><div class="card__header"><h3>Latest headlines</h3></div><div class="card__body"><ul class="dash-list">${headlines || '<li class="text-secondary">Nothing yet.</li>'}</ul></div></div>
                     <div class="card"><div class="card__header"><h3>Coverage &amp; trust</h3></div><div class="card__body">
                         <ul class="dash-list">
-                            <li><strong>Channels:</strong> online news (6 feeds)</li>
+                            <li><strong>Channels:</strong> Malaysian news outlets plus Google News Malaysia (English, Malay, Chinese, Tamil)</li>
                             <li><strong>Social:</strong> not covered. A test of open networks (Bluesky, Mastodon) found no usable Malaysian volume.</li>
                             <li><strong>AI-tagged:</strong> ${d.quality.total ? Math.round((d.quality.tagged / d.quality.total) * 100) : 0}% of articles</li>
                             <li><strong>Top sources:</strong> ${d.sources.map((s: any) => `${escapeHtml(s.source)} (${s.n})`).join(', ') || '—'}</li>
@@ -2674,6 +2701,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (d.error) throw new Error(d.error);
             } catch (e: any) { out.innerHTML = errorHtml(e.message); return; }
 
+            // Related by meaning: finds stories that do not contain the exact words, including in other languages.
+            let semHtml = '';
+            try {
+                const s = await (await apiFetch('/api/semantic?q=' + encodeURIComponent(q))).json();
+                const seen = new Set((d.news as any[]).map(n => n.url));
+                const related = (s.items || []).filter((i: any) => !seen.has(i.url)).slice(0, 10);
+                if (s.available && related.length) {
+                    semHtml = `<div class="card" style="margin-bottom:1rem;"><div class="card__header"><h3>Related by meaning</h3></div><div class="card__body"><p class="text-secondary" style="margin-bottom:0.75rem;">Stories about the same subject that may not contain the exact words, including in Malay, Chinese or Tamil.</p><ul class="dash-list">${related.map((i: any) => `<li class="dash-headline"><a href="${escapeHtml(i.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(i.title)}</a><div class="text-secondary">${escapeHtml(i.source)} · ${timeAgo(i.publishedAt)} · similarity ${Math.round(i.score * 100)}%</div></li>`).join('')}</ul></div></div>`;
+                }
+            } catch { /* semantic search is optional */ }
             const tagged = d.tally.Positive + d.tally.Neutral + d.tally.Negative;
             const oldest = d.corpus.oldest ? new Date(d.corpus.oldest * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'n/a';
             const newsHtml = d.news.map((n: any) => `<li class="dash-headline"><a href="${escapeHtml(n.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(n.title)}</a>
@@ -2690,6 +2727,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="card" style="margin-bottom:1rem;"><div class="card__header"><h3>News</h3></div><div class="card__body"><ul class="dash-list">${newsHtml || '<li class="text-secondary">No stored headlines mention this name.</li>'}</ul></div></div>
                 ${d.social.length ? `<div class="card" style="margin-bottom:1rem;"><div class="card__header"><h3>Social</h3></div><div class="card__body"><ul class="dash-list">${socialHtml}</ul></div></div>` : ''}
                 <p class="text-secondary">Searched ${d.corpus.articles} stored articles, going back to ${oldest}. <strong>No result here does not mean no risk</strong>: this covers only the news the platform collects, and it is not a background check.</p>`;
+            insertSemanticCard(out, semHtml);
+        }
+
+        function insertSemanticCard(out: HTMLElement, html: string) {
+            if (!html) return;
+            const cards = out.querySelectorAll(':scope > .card:not(.kpi)');
+            if (cards.length) (cards[0] as HTMLElement).insertAdjacentHTML('afterend', html);
         }
 
         function renderCoverageSearch(container: HTMLElement, title: string, subtitle: string, preset: string, autoRun: boolean) {

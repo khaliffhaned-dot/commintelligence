@@ -10,5 +10,14 @@
       "database_name": "commet-intel",
       "database_id": "cc47c154-7607-47a5-b3b2-17ad89b26373"
     }
+  ],
+  "vectorize": [
+    { "binding": "VECTORIZE", "index_name": "commet-news" }
+  ],
+  "r2_buckets": [
+    { "binding": "REPORTS", "bucket_name": "commet-reports" }
+  ],
+  "analytics_engine_datasets": [
+    { "binding": "METRICS", "dataset": "commet_metrics" }
   ]
 }

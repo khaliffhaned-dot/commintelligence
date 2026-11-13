@@ -1,12 +1,14 @@
 import { FEEDS, parseRss, sha256, json } from '../_lib/intel.js';
 import { classify } from '../_lib/classify.js';
+import { embedPending } from '../_lib/semantic.js';
+import { track } from '../_lib/metrics.js';
 import { gnewsConfigured, fetchGNews } from '../_lib/gnews.js';
 
 const COOLDOWN_SECONDS = 60;      // protects the AI/news quota from button-mashing
 const MAX_CLASSIFY_PER_PULL = 72; // 6 AI calls per pull; backlog is worked off over successive pulls
 const BATCH = 12;
 const GNEWS_COOLDOWN_SECONDS = 5400; // 90 minutes: keeps the free plan (100 requests/day) safe
-export async function onRequestPost({ env }) {
+export async function onRequestPost({ env, data }) {
     if (!env.DB || !env.AI) return json({ error: 'Missing D1 (DB) or Workers AI (AI) binding.' }, 500);
 
     const now = Math.floor(Date.now() / 1000);
@@ -84,6 +86,11 @@ export async function onRequestPost({ env }) {
     }
     const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM items WHERE classified = 0 OR audience IS NULL').first();
 
+    // Add new articles to the semantic index (Vectorize). A failure here never fails the pull.
+    let embedded = 0, embedError = null;
+    try { embedded = await embedPending(env); } catch (e) { embedError = String((e && e.message) || e).slice(0, 120); console.error('embedding failed', embedError); }
+    track(env, 'pull', [], [fresh.length, tagged, embedded, failed.length, aiFailures], data && data.auth ? data.auth.org.id : 'system');
+
     return json({
         ok: true,
         fetchedFeeds: FEEDS.length - failed.length,
@@ -93,6 +100,8 @@ export async function onRequestPost({ env }) {
         newItems: fresh.length,
         tagged,
         untaggedRemaining: left.n,
+        embedded,
+        embedError,
         aiFailures,
     });
 }

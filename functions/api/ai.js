@@ -4,6 +4,8 @@
 import { json, extractJson } from '../_lib/intel.js';
 import { allowAttempt } from '../_lib/auth.js';
 import { runAI } from '../_lib/airun.js';
+import { semanticSearch, semanticAvailable } from '../_lib/semantic.js';
+import { track } from '../_lib/metrics.js';
 
 const DEFAULT_TEXT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const DEFAULT_VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
@@ -21,6 +23,10 @@ const STOP = new Set(['return', 'valid', 'object', 'objects', 'following', 'stri
 async function groundingHeadlines(env, prompt) {
     const words = [...new Set(prompt.toLowerCase().match(/[a-z]{4,}/g) || [])].filter((w) => !STOP.has(w)).slice(0, 6);
     const rows = [];
+    // Meaning-based matches first (works across English, Malay, Chinese and Tamil), then keyword matches, then the newest.
+    if (semanticAvailable(env)) {
+        try { rows.push(...(await semanticSearch(env, prompt.slice(0, 500), 10)).map((r) => ({ title: r.title, source: r.source, published_at: r.publishedAt }))); } catch (e) { console.warn('semantic grounding skipped', e && e.message); }
+    }
     if (words.length) {
         const where = words.map(() => 'LOWER(title) LIKE ?').join(' OR ');
         const r = await env.DB.prepare(`SELECT title, source, published_at FROM items WHERE ${where} ORDER BY published_at DESC LIMIT 10`)
@@ -58,6 +64,7 @@ export async function onRequestPost({ request, env, data }) {
         return json({ error: `AI request limit reached (${RATE_PER_ORG_PER_HOUR} per hour). Try again later.` }, 429);
     }
 
+    const t0 = Date.now();
     let grounding = [];
     try { grounding = await groundingHeadlines(env, prompt); } catch (e) { console.warn('grounding unavailable', e && e.message); }
     const groundingText = grounding.length
@@ -77,9 +84,11 @@ export async function onRequestPost({ request, env, data }) {
         return out && out.response !== undefined ? out.response : out;
     };
 
+    track(env, 'ai_request', [isVision ? 'vision' : 'text'], [grounding.length, prompt.length], orgId);
     try {
         let raw = await callModel();
-        if (raw && typeof raw === 'object') return json({ result: raw, grounded: grounding.length });
+        if (raw && typeof raw === 'object') track(env, 'ai_done', [isVision ? 'vision' : 'text'], [Date.now() - t0], orgId);
+        return json({ result: raw, grounded: grounding.length });
         try {
             return json({ result: extractJson(raw), grounded: grounding.length });
         } catch {
