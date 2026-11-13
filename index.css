@@ -1049,3 +1049,11 @@ html { scroll-behavior: smooth; }
 .link-button { background: none; border: 0; padding: 0; color: var(--primary); text-decoration: underline; cursor: pointer; font: inherit; }
 
 #main-content:focus-visible { outline: 3px solid var(--primary); outline-offset: -3px; }
+
+/* Dark theme: one red cannot be both a button fill under white text and readable text on dark cards, so split the roles. */
+body.dark a:not([class]),
+body.dark .sidebar__title-v, body.dark .client-switcher__item.active, body.dark .feature-card__icon,
+body.dark .stat__value, body.dark .section-kicker, body.dark .link-button,
+body.dark .client-card--add:hover, body.dark .client-switcher__item--empty:hover { color: #ff8a8a; }
+body.dark .btn--primary, body.dark .toggle-btn.active, body.dark .segment-tab.active, body.dark .how-step__num { background-color: #c53030; border-color: #c53030; }
+body.dark .btn--primary:hover { background-color: #a82727; border-color: #a82727; }
