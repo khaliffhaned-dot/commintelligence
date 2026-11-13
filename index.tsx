@@ -971,7 +971,15 @@ document.addEventListener('DOMContentLoaded', () => {
             'Politics & Government', 'Other'];
         const INTEL_PARTIES: { [key: string]: string } = { BN: 'BN', PH: 'PH', PN: 'PN', GPS: 'GPS (Sarawak)', GRS: 'GRS (Sabah)', Other: 'Other political' };
         const AUTO_PULL_STALE_SECONDS = 600; // pull on open if data is older than 10 minutes
-        const FEED_POLL_MS = 60000;          // re-check every minute while the page is open
+        const FEED_POLL_MS = 60000;          // re-check every minute while the page is open (only when Auto-refresh is on)
+
+        // Manual by default: nothing pulls in the background unless the user switches Auto-refresh on.
+        // The choice is remembered in this browser.
+        function autoPullOn(): boolean { try { return localStorage.getItem('autoPull') === '1'; } catch { return false; } }
+        function setAutoPull(on: boolean) { try { localStorage.setItem('autoPull', on ? '1' : '0'); } catch { /* storage unavailable: stays manual */ } }
+        function autoToggleHtml(): string {
+            return `<label class="auto-toggle" title="Off: news updates only when you click Pull latest. On: the page pulls by itself when data is stale."><input type="checkbox" id="auto-pull-toggle" ${autoPullOn() ? 'checked' : ''}> Auto-refresh</label>`;
+        }
 
         function timeAgo(unixSeconds: number): string {
             const diff = Math.max(0, Math.floor(Date.now() / 1000) - unixSeconds);
@@ -1116,7 +1124,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p class="text-secondary">Real news across Malaysian sectors and party politics, AI-tagged for sector, coalition and sentiment.</p>
                         <p class="text-secondary" id="intel-feed-status">Loading…</p>
                     </div>
-                    <button id="intel-pull-button" class="btn btn--primary">Pull latest</button>
+                    <div class="header-actions">
+                        ${autoToggleHtml()}
+                        <button id="intel-pull-button" class="btn btn--primary">Pull latest</button>
+                    </div>
                 </div>
                 <div class="toggle-group" style="margin-bottom:1rem;" id="feed-channel-toggle">
                     <button class="toggle-btn active" data-channel="news" type="button">News</button>
@@ -1150,18 +1161,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            // Show what we have, pull if stale, then keep checking while this page stays open.
+            // Always show what is stored. Pulling is manual unless Auto-refresh is switched on.
+            const startFeedAuto = () => {
+                if (appState.signalFeedIntervalId) clearInterval(appState.signalFeedIntervalId);
+                appState.signalFeedIntervalId = setInterval(async () => {
+                    const view = document.getElementById('signal-feed-view');
+                    if (!view || view.classList.contains('view-hidden') || document.hidden) return;
+                    const data = await loadFeed();
+                    if (data && data.lastPull && (Date.now() / 1000 - data.lastPull) > AUTO_PULL_STALE_SECONDS) pullAndReload(pullBtn);
+                }, FEED_POLL_MS);
+            };
+            const stopFeedAuto = () => {
+                if (appState.signalFeedIntervalId) clearInterval(appState.signalFeedIntervalId);
+                appState.signalFeedIntervalId = null;
+            };
             loadFeed().then(data => {
+                if (!autoPullOn()) return;
                 const stale = !data || !data.lastPull || (Date.now() / 1000 - data.lastPull) > AUTO_PULL_STALE_SECONDS;
                 if (stale) pullAndReload(pullBtn);
             });
-            if (appState.signalFeedIntervalId) clearInterval(appState.signalFeedIntervalId);
-            appState.signalFeedIntervalId = setInterval(async () => {
-                const view = document.getElementById('signal-feed-view');
-                if (!view || view.classList.contains('view-hidden') || document.hidden) return;
-                const data = await loadFeed();
-                if (data && data.lastPull && (Date.now() / 1000 - data.lastPull) > AUTO_PULL_STALE_SECONDS) pullAndReload(pullBtn);
-            }, FEED_POLL_MS);
+            stopFeedAuto();
+            if (autoPullOn()) startFeedAuto();
+            document.getElementById('auto-pull-toggle')?.addEventListener('change', (e) => {
+                const on = (e.target as HTMLInputElement).checked;
+                setAutoPull(on);
+                if (on) { startFeedAuto(); loadFeed().then(d => { if (d && (!d.lastPull || (Date.now() / 1000 - d.lastPull) > AUTO_PULL_STALE_SECONDS)) pullAndReload(pullBtn); }); }
+                else stopFeedAuto();
+            });
         }
 
 
@@ -3211,9 +3237,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="view-header">
                     <div>
                         <h2>Malaysia Intelligence Dashboard</h2>
-                        <p class="text-secondary">${authState.org ? escapeHtml(authState.org.name) + ' · ' : ''}Real news coverage, last 7 days${d.lastPull ? ` · updated ${timeAgo(d.lastPull)}` : ''}${stale ? ' <span class="trend-badge trend-badge--stable">Data may be stale</span>' : ''}</p>
+                        <p class="text-secondary">${authState.org ? escapeHtml(authState.org.name) + ' · ' : ''}Real news coverage, last 7 days${d.lastPull ? ` · updated ${timeAgo(d.lastPull)}` : ''}${stale ? ` <span class="trend-badge trend-badge--stable">Data may be stale${autoPullOn() ? '' : ' · click Pull latest'}</span>` : ''}</p>
                     </div>
-                    <button id="dash-pull-button" class="btn btn--primary">Pull latest</button>
+                    <div class="header-actions">
+                        ${autoToggleHtml()}
+                        <button id="dash-pull-button" class="btn btn--primary">Pull latest</button>
+                    </div>
                 </div>
 
                 ${d.quality.total ? '' : `<div class="card" style="margin-bottom:1.5rem;"><div class="card__body"><strong>No coverage collected yet.</strong> Click <em>Pull latest</em> to fetch Malaysian news.</div></div>`}
@@ -3306,8 +3335,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             } else emptyNote('#dash-party-chart', 'No political coverage tagged yet.');
 
-            // Keep the dashboard fresh: if data is stale and the page is open, trigger a (rate-limited) pull once.
-            if (stale && !(appState as any).dashAutoPulled) {
+            // Auto-refresh (off by default): if switched on and data is stale, pull once per visit. Otherwise it stays manual.
+            document.getElementById('auto-pull-toggle')?.addEventListener('change', (e) => {
+                setAutoPull((e.target as HTMLInputElement).checked);
+                if ((e.target as HTMLInputElement).checked && stale) { pullBtn.click(); }
+            });
+            if (autoPullOn() && stale && !(appState as any).dashAutoPulled) {
                 (appState as any).dashAutoPulled = true;
                 pullLatestNews().then(r => { if (r && r.ok && r.newItems) renderDashboardView(); });
             }
