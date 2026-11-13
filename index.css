@@ -1047,3 +1047,5 @@ html { scroll-behavior: smooth; }
 .nav-item:focus-visible, .sub-nav-item:focus-visible, .toggle-btn:focus-visible, .client-switcher__display:focus-visible,
 .link-button:focus-visible, .landing-nav__link:focus-visible, .auto-toggle input:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
 .link-button { background: none; border: 0; padding: 0; color: var(--primary); text-decoration: underline; cursor: pointer; font: inherit; }
+
+#main-content:focus-visible { outline: 3px solid var(--primary); outline-offset: -3px; }

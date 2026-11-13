@@ -2952,6 +2952,8 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll<HTMLElement>('.nav-item').forEach(item => {
                 if (!item.hasAttribute('tabindex')) item.setAttribute('tabindex', '0');
                 if (!item.getAttribute('role')) item.setAttribute('role', 'button');
+                const label = item.querySelector('.nav-item__text')?.textContent?.trim();
+                if (label) item.setAttribute('aria-label', label);
                 item.setAttribute('aria-expanded', item.classList.contains('open') ? 'true' : 'false');
                 if (!item.dataset.kbd) {
                     item.dataset.kbd = '1';
@@ -3214,7 +3216,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             </button>
                         </div>
                     </header>
-                    <main class="main-content" id="main-content">
+                    <main class="main-content" id="main-content" tabindex="0" aria-label="Main content">
                         <!-- Views are rendered here -->
                         <div id="dashboard-overview-view" class="view"></div>
                         <div id="nusapulse-map-view" class="view view-hidden"></div>
