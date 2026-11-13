@@ -986,7 +986,7 @@ document.addEventListener('DOMContentLoaded', () => {
         async function handleGenerateContent() {
             const angle = (document.getElementById('content-angle-select') as HTMLSelectElement).value;
             const container = document.getElementById('content-ideas-container');
-            if (!angle || !container || !appState.currentClient) return;
+            if (!angle || !container || !appState.currentClient) { showToast('Add a client first, so the draft is written for them.', 'error'); return; }
 
             container.style.opacity = '1';
             container.innerHTML = `<div class="spinner"></div>`;
@@ -1675,7 +1675,7 @@ document.addEventListener('DOMContentLoaded', () => {
         /** Renders NusaPulse: Industry Insights View */
         function renderNusaPulseInsightsContent(data: any) {
              const container = document.getElementById('nusapulse-insights-view');
-            if (!container || !appState.currentClient) return;
+            if (!container || !appState.currentClient) { showToast('Add a client first, so the draft is written for them.', 'error'); return; }
             container.innerHTML = `
                 <div class="view-header">
                     <div>
