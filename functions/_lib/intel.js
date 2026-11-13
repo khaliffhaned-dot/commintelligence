@@ -26,6 +26,13 @@ export const FEEDS = [
     { name: 'Free Malaysia Today', url: 'https://www.freemalaysiatoday.com/category/highlight/feed' },
     { name: 'New Straits Times', url: 'https://www.nst.com.my/feed' },
     { name: 'Malaysiakini', url: 'https://www.malaysiakini.com/rss/en/news.rss' },
+    { name: 'Google News Malaysia', url: 'https://news.google.com/rss?hl=en-MY&gl=MY&ceid=MY:en' },
+    { name: 'Google News Malaysia', url: 'https://news.google.com/rss?hl=ms-MY&gl=MY&ceid=MY:ms' },
+    { name: 'Google News Malaysia', url: 'https://news.google.com/rss?hl=zh-MY&gl=MY&ceid=MY:zh-Hans' },
+    { name: 'Google News Malaysia', url: 'https://news.google.com/rss?hl=ta-MY&gl=MY&ceid=MY:ta' },
+    { name: 'Google News Malaysia', url: 'https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-MY&gl=MY&ceid=MY:en' },
+    { name: 'Google News Malaysia', url: 'https://news.google.com/rss/headlines/section/topic/NATION?hl=en-MY&gl=MY&ceid=MY:en' },
+    { name: 'Google News Malaysia', url: 'https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ms-MY&gl=MY&ceid=MY:ms' },
 ];
 
 const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&apos;': "'" };
