@@ -38,7 +38,7 @@ export async function onRequestPost({ env }) {
             await env.DB.prepare("INSERT INTO meta (key, value) VALUES ('last_gnews', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(String(now)).run();
             const g = await fetchGNews(env);
             articles.push(...g.articles);
-            gnews = { configured: true, found: g.articles.length, errors: g.errors };
+            gnews = { configured: true, found: g.articles.length, filteredOut: g.filteredOut, errors: g.errors };
         }
     }
 

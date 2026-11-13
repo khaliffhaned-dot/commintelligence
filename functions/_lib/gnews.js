@@ -10,10 +10,23 @@ const CALLS = [
     { country: 'my', lang: 'ta', category: 'general' },
 ];
 
+// GNews's country filter is loose (it also returns stories merely 'about' a country), so keep only items that are
+// clearly Malaysian: from a known Malaysian outlet, or with a headline that names Malaysia or a Malaysian institution.
+const MY_OUTLETS = ['the star', 'the edge', 'new straits times', 'free malaysia today', 'malaysiakini', 'malay mail', 'bernama', 'sinar', 'the sun',
+    'astro awani', 'the vibes', 'focus malaysia', 'lowyat', 'soyacincau', 'paul tan', 'berita harian', 'harian metro', 'utusan', 'kosmo', 'sin chew',
+    'china press', 'oriental daily', 'nanban', 'tamil nesan', 'malaysian reserve', 'theedgemalaysia', 'thestar', 'dailyexpress', 'borneo post', 'new sarawak tribune'];
+const MY_TERMS = /\b(malaysia|malaysian|malaysians|kuala lumpur|putrajaya|selangor|johor|penang|sarawak|sabah|kelantan|terengganu|perak|pahang|kedah|melaka|negeri sembilan|labuan|petaling jaya|anwar ibrahim|umno|pkr|bersatu|dewan rakyat|dewan negara|ringgit|bursa malaysia|petronas|tenaga nasional|maybank|cimb|khazanah|proton|perodua|mcmc|bank negara|madani)\b/i;
+
+export function isMalaysiaRelevant(article) {
+    const source = String((article.source && article.source.name) || '').toLowerCase();
+    if (MY_OUTLETS.some((o) => source.includes(o))) return true;
+    return MY_TERMS.test(`${article.title || ''} ${article.description || ''}`);
+}
+
 export const gnewsConfigured = (env) => !!env.GNEWS_API_KEY;
 
 export async function fetchGNews(env) {
-    const out = { articles: [], errors: [] };
+    const out = { articles: [], errors: [], filteredOut: 0 };
     for (let i = 0; i < CALLS.length; i++) {
         if (i) await new Promise((r) => setTimeout(r, 1100)); // stay under the 1 request/second limit
         const qs = new URLSearchParams({ ...CALLS[i], max: '10' });
@@ -30,6 +43,7 @@ export async function fetchGNews(env) {
             for (const a of body.articles || []) {
                 const published = Date.parse(a.publishedAt);
                 if (!a.title || !a.url || Number.isNaN(published)) continue;
+                if (!isMalaysiaRelevant(a)) { out.filteredOut++; continue; }
                 out.articles.push({ title: a.title, url: a.url, source: (a.source && a.source.name) || 'GNews', publishedAt: Math.floor(published / 1000), feed: 'gnews' });
             }
         } catch (e) {
