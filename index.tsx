@@ -238,203 +238,6 @@ document.addEventListener('DOMContentLoaded', () => {
          * Renders the NusaPulse (Market Intelligence) dashboard.
          */
         /** Renders the toolbar for switching the Regional Map between Brand and Political modes. */
-        function renderNusaPulseToolbarHtml(): string {
-            const mode = appState.nusaPulseMode;
-            const party = appState.nusaPulsePartyFocus;
-            return `
-                <div class="nusapulse-toolbar">
-                    <div class="toggle-group">
-                        <button class="toggle-btn ${mode === 'brand' ? 'active' : ''}" data-mode="brand" type="button">Brand</button>
-                        <button class="toggle-btn ${mode === 'political' ? 'active' : ''}" data-mode="political" type="button">Political Parties</button>
-                    </div>
-                    ${mode === 'political' ? `
-                    <select id="nusapulse-party-select" class="form-select">
-                        <option value="BN" ${party === 'BN' ? 'selected' : ''}>Barisan Nasional (BN)</option>
-                        <option value="PH" ${party === 'PH' ? 'selected' : ''}>Pakatan Harapan (PH)</option>
-                        <option value="PN" ${party === 'PN' ? 'selected' : ''}>Perikatan Nasional (PN)</option>
-                    </select>` : ''}
-                </div>
-            `;
-        }
-
-        function attachNusaPulseToolbarListeners() {
-            document.querySelectorAll('.nusapulse-toolbar .toggle-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const newMode = (btn as HTMLElement).dataset.mode as 'brand' | 'political';
-                    if (newMode !== appState.nusaPulseMode) {
-                        appState.nusaPulseMode = newMode;
-                        renderNusaPulseMapView();
-                    }
-                });
-            });
-            document.getElementById('nusapulse-party-select')?.addEventListener('change', (e) => {
-                appState.nusaPulsePartyFocus = (e.target as HTMLSelectElement).value;
-                renderNusaPulseMapView();
-            });
-        }
-
-        async function renderNusaPulseMapView() {
-            const container = document.getElementById('nusapulse-map-view');
-            if (!container) return;
-            const mode = appState.nusaPulseMode;
-            const party = appState.nusaPulsePartyFocus;
-
-            if (mode === 'brand' && !appState.currentClient) {
-                container.innerHTML = `
-                    <div class="view-header">
-                        <div><h2>NusaPulse: Regional Map</h2></div>
-                        ${renderNusaPulseToolbarHtml()}
-                    </div>
-                    <div class="empty-state">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                    <h3>No Client Selected</h3>
-                    <p>Please select a client from the switcher above, add a new client, or switch to "Political Parties" mode above.</p>
-                    <button id="mi-go-to-clients-btn" class="btn btn--primary">Go to Client Management</button>
-                </div>`;
-                document.getElementById('mi-go-to-clients-btn')?.addEventListener('click', () => {
-                    switchView('clients-view');
-                });
-                attachNusaPulseToolbarListeners();
-                return;
-            }
-
-            const cacheKey = mode === 'brand' ? `${appState.currentClientId}-nusapulseMap` : `political-${party}-nusapulseMap`;
-            if (appState.cache[cacheKey]) {
-                renderNusaPulseMapContent(appState.cache[cacheKey]);
-                return;
-            }
-
-            const loadingLabel = mode === 'brand' ? appState.currentClient!.name : COALITION_NAMES[party];
-            container.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Generating NusaPulse Report for ${loadingLabel}...</p></div>`;
-
-            try {
-                const data = mode === 'brand'
-                    ? await fetchMarketIntelligenceData(appState.currentClient!)
-                    : await fetchPartyRegionalData(party);
-                appState.cache[cacheKey] = data;
-                renderNusaPulseMapContent(data);
-            } catch(error) {
-                console.error("Failed to fetch market intelligence data", error);
-                container.innerHTML = `
-                    <div class="view-header">
-                        <div><h2>NusaPulse: Regional Map</h2></div>
-                        ${renderNusaPulseToolbarHtml()}
-                    </div>
-                    <div class="empty-state">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                    <h3>Analysis Failed</h3>
-                    <p class="error-message">Could not generate the NusaPulse report. The backend service may be unavailable.</p>
-                </div>`;
-                attachNusaPulseToolbarListeners();
-            }
-        }
-
-        function renderNusaPulseMapContent(data: any) {
-            const container = document.getElementById('nusapulse-map-view');
-            if (!container) return;
-            const mode = appState.nusaPulseMode;
-            const subtitle = mode === 'brand'
-                ? `Hyperlocal intelligence for ${appState.currentClient?.name} across Malaysia.`
-                : `Regional public sentiment for ${COALITION_NAMES[appState.nusaPulsePartyFocus]} across Malaysia.`;
-            container.innerHTML = `
-                 <div class="view-header">
-                    <div>
-                        <h2>NusaPulse: Regional Map</h2>
-                        <p class="text-secondary">${subtitle}</p>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 1rem;">
-                        ${renderNusaPulseToolbarHtml()}
-                        <button id="export-mi-pdf-button" class="btn btn--secondary">Export as PDF</button>
-                    </div>
-                </div>
-                <div class="nusapulse-grid" id="mi-dashboard-export-content">
-                    <div id="mi-map-card" class="card nusapulse-map-card">
-                        <div class="card__header">
-                            <h3>Regional Sentiment Map</h3>
-                            <p class="text-secondary">Real-time sentiment and media buzz across all Malaysian states.</p>
-                        </div>
-                        <div id="mi-map" class="map-container"></div>
-                    </div>
-                    <div id="mi-sentiment-chart-card" class="card">
-                        <div class="card__header">
-                            <h3>Sentiment Over Time</h3>
-                             <p class="text-secondary">Last 6 months trend</p>
-                        </div>
-                        <div id="mi-sentiment-chart" class="card__body"></div>
-                    </div>
-                    <div id="mi-topics-chart-card" class="card">
-                         <div class="card__header">
-                            <h3>Key Topics</h3>
-                             <p class="text-secondary">Top 5 trending topics</p>
-                        </div>
-                        <div id="mi-topics-chart" class="card__body"></div>
-                    </div>
-                    <div id="mi-buzz-chart-card" class="card">
-                         <div class="card__header">
-                            <h3>Media Buzz Tracking</h3>
-                            <p class="text-secondary">Conversation volume by state</p>
-                        </div>
-                        <div id="mi-buzz-chart" class="card__body"></div>
-                    </div>
-                </div>
-            `;
-            document.getElementById('export-mi-pdf-button')?.addEventListener('click', () => handleGenericPdfExport(
-                'mi-dashboard-export-content',
-                'export-mi-pdf-button',
-                'NusaPulse Report'
-            ));
-            attachNusaPulseToolbarListeners();
-            initializeMapAndCharts(data, 'map');
-        }
-
-        /**
-         * Fetches AI-generated, indicative regional public sentiment data for a political coalition.
-         * Reuses the same shape as fetchMarketIntelligenceData so it can drive the same map/charts.
-         */
-        async function fetchPartyRegionalData(partyCode: string) {
-            const partyName = COALITION_NAMES[partyCode] || partyCode;
-            const prompt = `
-                You are a Malaysian political intelligence analyst. Generate an indicative, AI-estimated regional public
-                sentiment report for the political coalition "${partyName}" across Malaysia.
-                The report must be a valid JSON object with the following keys: 'regionalSentiment', 'sentimentOverTime', 'keyTopics'.
-
-                1.  'regionalSentiment': An array of objects, one for each major Malaysian state (e.g., Selangor, Kuala Lumpur, Johor, Penang, Sarawak, Sabah, etc.). Each object must have:
-                    - 'region': The name of the state (string).
-                    - 'lat', 'lng': Geographic coordinates (number).
-                    - 'positive', 'neutral', 'negative': Sentiment percentages toward this coalition in that state (integer, summing to 100).
-                    - 'buzz': A score from 1 to 100 representing conversation volume about this coalition (integer).
-                2.  'sentimentOverTime': An object with 'categories' (an array of the last 6 months, e.g., ["Jan", "Feb", ...]) and 'series' (an array of 3 objects for 'Positive', 'Neutral', 'Negative', each with a 'name' and 'data' array of 6 integer percentages).
-                3.  'keyTopics': An object with 'labels' (an array of 5 trending topic strings associated with this coalition) and 'series' (an array of 5 corresponding integer values representing their prevalence).
-            `;
-            return generateJson(prompt);
-        }
-
-        async function fetchMarketIntelligenceData(client: Client) {
-             const prompt = `
-                You are a market intelligence analyst for Malaysia.
-                Generate a detailed market intelligence report for the client "${client.name}" in the "${client.industry}" sector.
-                The report must be a valid JSON object.
-                The JSON object must contain the following keys: 'regionalSentiment', 'sentimentOverTime', 'keyTopics', 'shareOfVoice', 'sentimentComparison', and 'competitorInsights'.
-
-                1.  'regionalSentiment': An array of objects, one for each major Malaysian state (e.g., Selangor, Kuala Lumpur, Johor, Penang, Sarawak, Sabah, etc.). Each object must have:
-                    - 'region': The name of the state (string).
-                    - 'lat', 'lng': Geographic coordinates (number).
-                    - 'positive', 'neutral', 'negative': Sentiment percentages (integer, summing to 100).
-                    - 'buzz': A score from 1 to 100 representing conversation volume (integer).
-                2.  'sentimentOverTime': An object with 'categories' (an array of the last 6 months, e.g., ["Jan", "Feb", ...]) and 'series' (an array of 3 objects for 'Positive', 'Neutral', 'Negative', each with a 'name' and 'data' array of 6 integer percentages).
-                3.  'keyTopics': An object with 'labels' (an array of 5 trending topic strings) and 'series' (an array of 5 corresponding integer values representing their prevalence).
-                4.  'shareOfVoice': An object with 'labels' (an array of strings: the client's name and 3 plausible competitor names) and 'series' (an array of 4 corresponding integer percentages that sum to 100).
-                5.  'sentimentComparison': An object with 'labels' (same as shareOfVoice labels) and 'series' (an array of 3 objects for 'Positive', 'Neutral', 'Negative', each with 'name' and 'data' array of 4 sentiment scores from 0-100).
-                6.  'competitorInsights': A concise paragraph (string) summarizing a key insight about a competitor's recent activities.
-            `;
-            try {
-                return await generateJson(prompt);
-            } catch (e) {
-                console.error("Failed to parse market intelligence JSON:", e);
-                throw e; // Re-throw to be caught by the caller
-            }
-        }
-
         /**
          * Initializes the Leaflet map and ApexCharts with API data.
          */
@@ -740,110 +543,6 @@ document.addEventListener('DOMContentLoaded', () => {
         /**
          * Renders the Veritas Propagation Map view.
          */
-        function renderVeritasPropagationView() {
-            const container = document.getElementById('veritas-propagation-view');
-            if (!container) return;
-
-            // Check for cached data first
-            const cacheKey = `${appState.currentClientId}-veritasPropagation`;
-            const cachedData = appState.cache[cacheKey];
-
-            if (!cachedData && !appState.latestVerificationResult) {
-                container.innerHTML = `<div class="empty-state">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M12 10v0"></path><path d="m14.5 9.5-5 5"></path><path d="m9.5 9.5 5 5"></path></svg>
-                    <h3>No Data to Map</h3>
-                    <p>Please analyze some content in the 'Narrative Integrity' view first. The propagation map will be generated based on the latest analysis.</p>
-                    <button id="vp-go-to-integrity-btn" class="btn btn--primary">Go to Integrity Analysis</button>
-                </div>`;
-                document.getElementById('vp-go-to-integrity-btn')?.addEventListener('click', () => {
-                    switchView('veritas-integrity-view');
-                });
-                return;
-            }
-            
-            const data = cachedData || appState.latestVerificationResult.propagation;
-
-            container.innerHTML = `
-                <div class="view-header">
-                    <div>
-                        <h2>Veritas: Narrative Propagation Map</h2>
-                        <p class="text-secondary">Visualize the predicted spread of the analyzed narrative.</p>
-                    </div>
-                     <button id="export-prop-pdf-button" class="btn btn--secondary">Export as PDF</button>
-                </div>
-                <div class="propagation-grid" id="prop-dashboard-export-content">
-                    <div class="card">
-                         <div class="card__header">
-                            <h3>Propagation Metrics</h3>
-                            <p class="text-secondary">Key indicators of narrative spread.</p>
-                        </div>
-                        <div class="card__body">
-                            <div class="propagation-metric">
-                                <span class="propagation-metric__label">Virality Score</span>
-                                <span class="propagation-metric__value">${data.viralityScore}/100</span>
-                            </div>
-                            <div class="propagation-metric">
-                                <span class="propagation-metric__label">Reach Estimate</span>
-                                <span class="propagation-metric__value">${data.reachEstimate.toLocaleString()}</span>
-                            </div>
-                            <div class="propagation-metric">
-                                <span class="propagation-metric__label">Key Amplifier</span>
-                                <span class="propagation-metric__value">${data.keyAmplifier}</span>
-                            </div>
-                            <div class="propagation-metric">
-                                <span class="propagation-metric__label">Predicted Timescale</span>
-                                <span class="propagation-metric__value">${data.timescale}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="propagation-map-container">
-                        <svg class="propagation-svg">
-                            <defs>
-                                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="8.5" refY="3.5" orient="auto">
-                                    <polygon points="0 0, 10 3.5, 0 7" />
-                                </marker>
-                            </defs>
-                            <line id="line-source-amplifier" stroke-width="2" marker-end="url(#arrowhead)"></line>
-                            <line id="line-amplifier-bot" stroke-width="2" marker-end="url(#arrowhead)"></line>
-                            <line id="line-amplifier-media" stroke-width="2" marker-end="url(#arrowhead)"></line>
-                            <line id="line-bot-public" stroke-width="2" marker-end="url(#arrowhead)"></line>
-                        </svg>
-
-                        <div id="node-source" class="propagation-node propagation-node--source" style="top: 45%; left: 2rem;">
-                            <div class="propagation-node__icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg></div>
-                            <div class="propagation-node__text"><div class="propagation-node__title">Original Source</div><div class="propagation-node__subtitle">Disinfo Actor</div></div>
-                        </div>
-                        <div id="node-amplifier" class="propagation-node propagation-node--amplifier" style="top: 20%; left: 35%;">
-                             <div class="propagation-node__icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 13.2a6.5 6.5 0 0 0 0-9.2"/><path d="M10.6 10.4c.9-.9.9-2.5 0-3.4s-2.5-.9-3.4 0"/><path d="m16.2 4.8 4.9-4.9"/><path d="m19.1 8.7 2.1-2.1"/><path d="m13.4 1.9-2.1 2.1"/></svg></div>
-                            <div class="propagation-node__text"><div class="propagation-node__title">Amplifier</div><div class="propagation-node__subtitle">Influencer/Group</div></div>
-                        </div>
-                        <div id="node-bot" class="propagation-node propagation-node--botnet" style="top: 45%; left: 50%;">
-                             <div class="propagation-node__icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></div>
-                            <div class="propagation-node__text"><div class="propagation-node__title">Bot Network</div><div class="propagation-node__subtitle">Automated Spread</div></div>
-                        </div>
-                        <div id="node-media" class="propagation-node propagation-node--media" style="top: 70%; left: 35%;">
-                             <div class="propagation-node__icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg></div>
-                            <div class="propagation-node__text"><div class="propagation-node__title">Media Outlets</div><div class="propagation-node__subtitle">News/Blogs</div></div>
-                        </div>
-                        <div id="node-public" class="propagation-node propagation-node--public" style="top: 45%; right: 2rem;">
-                             <div class="propagation-node__icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-                            <div class="propagation-node__text"><div class="propagation-node__title">General Public</div><div class="propagation-node__subtitle">Social Media Users</div></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            document.getElementById('export-prop-pdf-button')?.addEventListener('click', () => handleGenericPdfExport(
-                'prop-dashboard-export-content',
-                'export-prop-pdf-button',
-                'Narrative Propagation Report'
-            ));
-            
-            requestAnimationFrame(() => {
-                updatePropagationLines();
-            });
-        }
-        
         /**
          * Renders the Client Management view.
          */
@@ -1192,69 +891,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-        async function renderNexusForecasterView() {
-            const container = document.getElementById('nexus-forecaster-view');
-            if (!container) return;
-            container.innerHTML = `
-                <div class="view-header">
-                    <div>
-                        <h2>Nexus: Policy & Stakeholder Forecaster</h2>
-                        <p class="text-secondary">Monitor legislative affairs and predict policy impact with AI/ML.</p>
-                    </div>
-                </div>
-                <div class="nexus-grid">
-                    <div class="card">
-                        <div class="card__header"><div class="card__header-main"><h3>Tracked Policies</h3><p class="text-secondary">Live updates from Parliament</p></div></div>
-                        <div id="nexus-policy-list" class="card__body" style="padding: 0;"></div>
-                    </div>
-                    <div class="card" id="nexus-impact-panel-container">
-                        <div class="card__body" id="nexus-impact-panel">
-                             <div class="empty-state">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                                <h4>No Policy Selected</h4>
-                                <p>Select a policy from the list to view the AI-generated impact analysis and stakeholder map.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            const policyListContainer = document.getElementById('nexus-policy-list');
-            if (!policyListContainer) return;
-            
-            // This would come from a live government API feed in a real product.
-            const policies = fetchPolicies();
-            
-            policyListContainer.innerHTML = policies.map((p:any) => `
-                <div class="policy-item" data-policy-id="${p.id}">
-                    <div class="policy-item__info">
-                        <h4>${p.name}</h4>
-                        <p>Status: ${p.status} | Last Update: ${p.lastUpdate}</p>
-                    </div>
-                    <div class="policy-status policy-status--${p.status.toLowerCase()}">${p.status}</div>
-                </div>
-            `).join('');
-
-            document.querySelectorAll('.policy-item').forEach(item => {
-                item.addEventListener('click', () => {
-                    const policyId = (item as HTMLElement).dataset.policyId;
-                    renderNexusImpactAnalysis(policies.find((p: any) => p.id === policyId));
-                     document.querySelectorAll('.policy-item').forEach(i => i.classList.remove('active'));
-                    item.classList.add('active');
-                });
-            });
-        }
-        
-        function fetchPolicies() {
-            // In a production app, this would fetch from a live data source (e.g., a government API or a web scraper).
-            // For now, it returns a static but representative list.
-            return [
-                { id: 'policy-01', name: 'National Cybersecurity Bill 2024', status: 'Debating', lastUpdate: '2024-07-15', details: 'A bill to strengthen national cybersecurity frameworks and enforcement.' },
-                { id: 'policy-02', name: 'Renewable Energy Transition Roadmap', status: 'Passed', lastUpdate: '2024-06-28', details: 'A national plan to increase the share of renewable energy in the power grid to 40% by 2035.' },
-                { id: 'policy-03', name: 'Digital Economy Blueprint Phase 2', status: 'Proposed', lastUpdate: '2024-07-22', details: 'A proposal to accelerate digital adoption in SMEs and rural areas.' },
-            ];
-        }
-
         async function renderNexusImpactAnalysis(policy: any) {
             const container = document.getElementById('nexus-impact-panel');
             if (!container) return;
@@ -1309,104 +945,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        function renderAegisReputationView() {
-            const container = document.getElementById('aegis-reputation-view');
-            if (!container) return;
-
-            if (!appState.currentClient) {
-                 container.innerHTML = `<div class="empty-state">
-                    <h3>No Client Selected</h3>
-                    <p>Please select a client to view the Aegis dashboard.</p>
-                </div>`;
-                return;
-            }
-            
-            // In a real app, this would be a complex, AI-driven score.
-            // For the demo, we'll keep the visual generation but the logic is now AI-first.
-            const score = 82; 
-            const circumference = 2 * Math.PI * 90;
-            const offset = circumference - (score / 100) * circumference;
-
-            container.innerHTML = `
-                <div class="view-header">
-                    <div>
-                        <h2>Aegis: Reputation Command & Crisis AI</h2>
-                        <p class="text-secondary">Predictive reputation scoring and AI-powered crisis simulation.</p>
-                    </div>
-                </div>
-                <div class="aegis-grid">
-                    <div class="card">
-                        <div class="card__header"><h3>Brand Maruah Score</h3></div>
-                        <div class="card__body">
-                             <div class="maruah-score-dial">
-                                 <svg viewBox="0 0 200 100">
-                                    <path d="M 10 100 A 90 90 0 0 1 190 100" stroke="var(--surface-light)" stroke-width="20" fill="none" />
-                                    <path d="M 10 100 A 90 90 0 0 1 190 100" stroke="var(--success)" stroke-width="20" fill="none" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}" stroke-linecap="round" />
-                                </svg>
-                                <div class="maruah-score-text">
-                                    <div class="maruah-score-value">${score}</div>
-                                    <div class="maruah-score-label">Excellent</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <div class="card__header"><h3>Reputation Factors</h3></div>
-                        <div class="card__body">
-                            <div class="propagation-metric"><span class="propagation-metric__label">Media Sentiment</span><span class="propagation-metric__value">Positive</span></div>
-                            <div class="propagation-metric"><span class="propagation-metric__label">Social Media Tone</span><span class="propagation-metric__value">Positive</span></div>
-                            <div class="propagation-metric"><span class="propagation-metric__label">Stakeholder Trust</span><span class="propagation-metric__value">High</span></div>
-                        </div>
-                    </div>
-                    <div class="card">
-                         <div class="card__header"><h3>Crisis Simulation</h3></div>
-                         <div class="card__body">
-                            <div class="crisis-sim-actions">
-                                <select id="crisis-scenario-select" class="form-select">
-                                    <option>Select a scenario...</option>
-                                    <option value="Product recall">Product Recall</option>
-                                    <option value="Negative media coverage">Negative Media Coverage</option>
-                                    <option value="Data breach">Data Breach</option>
-                                </select>
-                                <button id="run-sim-button" class="btn btn--primary">Run Sim</button>
-                            </div>
-                            <div id="crisis-sim-output-container" class="crisis-sim-output">
-                                <h5>AI Recommended First Response:</h5>
-                                <p>Select a scenario to generate a response plan.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            document.getElementById('run-sim-button')?.addEventListener('click', handleCrisisSim);
-        }
-        
-        async function handleCrisisSim() {
-            const scenario = (document.getElementById('crisis-scenario-select') as HTMLSelectElement).value;
-            const outputContainer = document.getElementById('crisis-sim-output-container');
-            if (!scenario || !outputContainer || !appState.currentClient) return;
-
-            outputContainer.innerHTML = `<div class="spinner"></div><p>Generating response for ${appState.currentClient.name}...</p>`;
-            try {
-                const prompt = `
-                    You are a crisis communications expert in Malaysia.
-                    For the client "${appState.currentClient.name}", generate a concise, actionable first response plan for the following crisis scenario: "${scenario}".
-                    The response should be a single, detailed paragraph.
-                    Return a single valid JSON object with one key: "responsePlan".
-                `;
-                const result = await generateJson(prompt);
-
-                outputContainer.innerHTML = `
-                    <h5>AI Recommended First Response for "${scenario}":</h5>
-                    <p>${result.responsePlan}</p>
-                `;
-            } catch (e) {
-                outputContainer.innerHTML = `<p class="error-message">Could not generate simulation response.</p>`;
-            }
-        }
-
-
         function renderAmplifyCommsView() {
             const container = document.getElementById('amplify-comms-view');
             if (!container) return;
@@ -1414,29 +952,10 @@ document.addEventListener('DOMContentLoaded', () => {
                  <div class="view-header">
                     <div>
                         <h2>Amplify: Strategic Influence & Comms Suite</h2>
-                        <p class="text-secondary">AI-driven audience segmentation and content generation.</p>
+                        <p class="text-secondary">AI-assisted content ideas, drafted for human review.</p>
                     </div>
                 </div>
                 <div class="amplify-grid">
-                    <div class="card">
-                         <div class="card__header"><h3>Audience Segmentation</h3></div>
-                         <div class="card__body">
-                            <div class="audience-segments">
-                                <button class="segment-tab active" data-segment="urban_millennials">Urban Millennials</button>
-                                <button class="segment-tab" data-segment="suburban_families">Suburban Families</button>
-                                <button class="segment-tab" data-segment="digital_natives">Digital Natives</button>
-                            </div>
-                            <div id="segment-details-container" class="segment-details"></div>
-                        </div>
-                    </div>
-                     <div class="card">
-                         <div class="card__header"><h3>Key Opinion Leaders (KOLs)</h3></div>
-                         <div class="card__body kol-list">
-                            <div class="kol-item"><img src="https://i.pravatar.cc/40?u=kol1" class="kol-avatar" alt="KOL Avatar"><div class="kol-info"><h5>Aina Abdul</h5><p>Tech & Lifestyle Influencer</p></div></div>
-                            <div class="kol-item"><img src="https://i.pravatar.cc/40?u=kol2" class="kol-avatar" alt="KOL Avatar"><div class="kol-info"><h5>Ben Ibrahim</h5><p>Financial News Journalist</p></div></div>
-                            <div class="kol-item"><img src="https://i.pravatar.cc/40?u=kol3" class="kol-avatar" alt="KOL Avatar"><div class="kol-info"><h5>Dr. Malek Hassan</h5><p>Policy Analyst</p></div></div>
-                        </div>
-                    </div>
                      <div class="card">
                          <div class="card__header"><h3>AI Content Engine</h3></div>
                          <div class="card__body">
@@ -1457,39 +976,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
 
-            document.querySelectorAll('.segment-tab').forEach(tab => {
-                tab.addEventListener('click', () => {
-                    document.querySelectorAll('.segment-tab').forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
-                    const segmentId = (tab as HTMLElement).dataset.segment;
-                    updateSegmentDetails(segmentId!);
-                });
-            });
-
             document.getElementById('generate-content-button')?.addEventListener('click', handleGenerateContent);
-            updateSegmentDetails('urban_millennials'); // Initial load
-        }
-        
-        function updateSegmentDetails(segmentId: string) {
-            const container = document.getElementById('segment-details-container');
-            if (!container) return;
-            // This data is static as it represents stable audience personas.
-            const details = {
-                urban_millennials: {
-                    title: "Urban Millennials",
-                    description: "Ages 25-40, living in major cities like KL and Penang. Highly connected, value authenticity and social responsibility. Primarily reached through Instagram, TikTok, and digital news portals."
-                },
-                suburban_families: {
-                    title: "Suburban Families",
-                    description: "Ages 35-55, with children, living in suburban areas. Value-conscious, prioritize safety and reliability. Reached through Facebook, community forums, and trusted news sources."
-                },
-                digital_natives: {
-                    title: "Digital Natives",
-                    description: "Ages 18-24, students or early in their careers. Trend-focused, highly visual, and prefer short-form content. Primarily on TikTok, X (Twitter), and YouTube."
-                }
-            };
-            const detail = details[segmentId as keyof typeof details];
-            container.innerHTML = `<h4>About: ${detail.title}</h4><p>${detail.description}</p>`;
         }
         
         async function handleGenerateContent() {
@@ -1953,16 +1440,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const clientsJson = localStorage.getItem(CLIENTS_STORAGE_KEY);
                 let clients: Client[] = clientsJson ? JSON.parse(clientsJson) : [];
 
-                if (clients.length === 0) {
-                    // If no clients exist, add the default one and save it.
-                    clients = [{
-                        id: 'prsm-01',
-                        name: 'Public Relations Practitioners Society of Malaysia',
-                        industry: 'Professional Association'
-                    }];
-                    localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(clients));
-                }
-
                 appState.clients = clients;
 
                 if (appState.clients.length > 0 && !appState.currentClientId) {
@@ -2049,115 +1526,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- NEW MODULES ---
 
         /** Renders Signal: Video Intelligence View */
-        function renderSignalVideoView() {
-            const container = document.getElementById('signal-video-view');
-            if (!container) return;
-            container.innerHTML = `
-                <div class="view-header">
-                    <div>
-                        <h2>Signal: Video Intelligence</h2>
-                        <p class="text-secondary">Extract insights, transcripts, and summaries from video content.</p>
-                    </div>
-                    <button id="export-video-analysis-pdf-button" class="btn btn--secondary" style="display: none;">Export as PDF</button>
-                </div>
-                <div class="video-analysis-grid" id="video-analysis-export-content">
-                    <div class="card">
-                        <div class="card__header"><h3>Video Analysis Input</h3></div>
-                        <div class="card__body">
-                             <div class="form-group">
-                                <label for="video-url-input">Video URL</label>
-                                <input type="url" id="video-url-input" class="form-input" placeholder="e.g., https://www.youtube.com/watch?v=...">
-                            </div>
-                            <button id="analyze-video-button" class="btn btn--primary">Analyze Video</button>
-                        </div>
-                    </div>
-                    <div id="video-analysis-output">
-                        <div class="empty-state">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
-                            <h4>Ready for Analysis</h4>
-                            <p>Enter a video URL to generate a summary and transcript.</p>
-                        </div>
-                    </div>
-                </div>
-            `;
-            document.getElementById('analyze-video-button')?.addEventListener('click', handleVideoAnalysis);
-            document.getElementById('export-video-analysis-pdf-button')?.addEventListener('click', () => handleGenericPdfExport(
-                'video-analysis-export-content',
-                'export-video-analysis-pdf-button',
-                'Video Intelligence Report'
-            ));
-        }
-
-        async function handleVideoAnalysis() {
-            const urlInput = document.getElementById('video-url-input') as HTMLInputElement;
-            const outputContainer = document.getElementById('video-analysis-output');
-            const button = document.getElementById('analyze-video-button') as HTMLButtonElement;
-            const exportBtn = document.getElementById('export-video-analysis-pdf-button');
-            if (!urlInput?.value || !outputContainer || !button) return;
-
-            button.disabled = true;
-            button.innerHTML = '<div class="spinner"></div> Analyzing...';
-            if (exportBtn) exportBtn.style.display = 'none';
-            outputContainer.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>AI is analyzing the video. This may take a moment...</p></div>`;
-            
-            try {
-                // NOTE: The model cannot directly access URLs. This prompt asks it to *simulate* an analysis.
-                // A production backend would use tools to download and transcribe the video before passing content to the model.
-                const prompt = `
-                    You are a video analysis AI. A user has provided this URL: "${urlInput.value}".
-                    Act as if you have watched and analyzed the video. Generate a plausible analysis.
-                    Return a single valid JSON object with three keys:
-                    1. "summary": A concise paragraph summarizing the video's content.
-                    2. "topics": An array of 3-5 key topics discussed in the video (array of strings).
-                    3. "transcript": A short, plausible excerpt of the video's transcript (a single string with line breaks).
-                `;
-                const result = await generateJson(prompt);
-                
-                outputContainer.innerHTML = `
-                    <div class="card">
-                        <div class="card__header"><h3>AI Summary & Key Topics</h3></div>
-                        <div class="card__body">
-                            <p>${result.summary}</p>
-                            <hr>
-                            <h4>Key Topics:</h4>
-                            <p>${result.topics.join(', ')}</p>
-                        </div>
-                    </div>
-                     <div class="card">
-                        <div class="card__header"><h3>Transcript</h3></div>
-                        <div class="card__body">
-                            <div class="video-transcript">${result.transcript.replace(/\n/g, '<br>')}</div>
-                        </div>
-                    </div>
-                `;
-                if(exportBtn) exportBtn.style.display = 'inline-flex';
-            } catch (e) {
-                 outputContainer.innerHTML = `<div class="empty-state"><p class="error-message">Could not analyze the video.</p></div>`;
-            } finally {
-                button.disabled = false;
-                button.innerHTML = 'Analyze Video';
-            }
-        }
-
         /** Renders Signal: Video Generation View */
-        function renderSignalVideoGenerationView() {
-            const container = document.getElementById('signal-video-generation-view');
-            if (!container) return;
-            container.innerHTML = `
-                <div class="view-header">
-                    <div>
-                        <h2>Signal: AI Video Generation</h2>
-                        <p class="text-secondary">Create short video clips from text prompts and images.</p>
-                    </div>
-                </div>
-                <div class="empty-state">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
-                    <h3>Not Available on This Provider</h3>
-                    <p>Video generation previously used Google's Veo model, which has no equivalent on Hunyuan's OpenAI-compatible chat API. Tencent's native video generation service uses a different authentication scheme (Tencent Cloud SecretId/SecretKey request signing) that must never run in the browser, so this feature needs a small backend proxy before it can be re-enabled.</p>
-                </div>
-            `;
-        }
-
         /** Renders Veritas: Deepfake Detection View */
         function renderVeritasDeepfakeView() {
             const container = document.getElementById('veritas-deepfake-view');
@@ -2293,32 +1662,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         /** Renders NusaPulse: Industry Insights View */
-        async function renderNusaPulseInsightsView() {
-            const container = document.getElementById('nusapulse-insights-view');
-            if (!container) return;
-
-             if (!appState.currentClient) {
-                container.innerHTML = `<div class="empty-state"><h3>No Client Selected</h3><p>Please select a client to get started.</p></div>`;
-                return;
-            }
-
-            const cacheKey = `${appState.currentClientId}-nusapulseMap`; // Re-use same data object
-            if (appState.cache[cacheKey]) {
-                renderNusaPulseInsightsContent(appState.cache[cacheKey]);
-                return;
-            }
-
-            container.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>Generating Industry Insights for ${appState.currentClient.name}...</p></div>`;
-            
-            try {
-                const data = await fetchMarketIntelligenceData(appState.currentClient);
-                appState.cache[cacheKey] = data;
-                renderNusaPulseInsightsContent(data);
-            } catch(error) {
-                container.innerHTML = `<div class="empty-state"><p class="error-message">Could not generate insights.</p></div>`;
-            }
-        }
-
         function renderNusaPulseInsightsContent(data: any) {
              const container = document.getElementById('nusapulse-insights-view');
             if (!container || !appState.currentClient) return;
@@ -2633,143 +1976,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         /** Renders Due Diligence: Entity Vetting View */
-        function renderDueDiligenceView() {
-            const container = document.getElementById('duediligence-vetting-view');
-            if (!container) return;
-            container.innerHTML = `
-                <div class="view-header">
-                    <div>
-                        <h2>Due Diligence: Entity Vetting</h2>
-                        <p class="text-secondary">Assess political, cultural (3R), and reputational risk before engaging a partner, politician, or entity in Malaysia.</p>
-                    </div>
-                    <button id="export-dd-pdf-button" class="btn btn--secondary" style="display: none;">Export as PDF</button>
-                </div>
-                <div class="veritas-grid">
-                    <div class="input-panel">
-                        <div class="card">
-                            <div class="card__header">
-                                <h3>Entity Details</h3>
-                                <p class="text-secondary">Provide the entity to vet and any known context.</p>
-                            </div>
-                            <div class="card__body">
-                                <div class="form-group">
-                                    <label for="dd-entity-name-input">Entity Name</label>
-                                    <input type="text" id="dd-entity-name-input" class="form-input" placeholder="e.g., a politician, company, or organization">
-                                </div>
-                                <div class="form-group">
-                                    <label for="dd-entity-type-select">Entity Type</label>
-                                    <select id="dd-entity-type-select" class="form-select">
-                                        <option value="Politician">Politician</option>
-                                        <option value="Political Party">Political Party</option>
-                                        <option value="Company">Company / Corporation</option>
-                                        <option value="NGO">NGO / Civil Society Group</option>
-                                        <option value="Government Agency">Government Agency</option>
-                                        <option value="Individual">Individual (Non-political)</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="dd-context-input">Additional Context (optional)</label>
-                                    <textarea id="dd-context-input" class="form-textarea" placeholder="e.g., proposed sponsorship deal, joint statement, board appointment..."></textarea>
-                                </div>
-                                <button id="run-due-diligence-button" class="btn btn--primary">Run Due Diligence</button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="output-panel">
-                        <div id="due-diligence-results-container">
-                            <div class="empty-state">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                                <h4>Ready to Vet</h4>
-                                <p>Enter an entity to generate a political, cultural, and reputational due diligence report.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            document.getElementById('run-due-diligence-button')?.addEventListener('click', handleRunDueDiligence);
-            document.getElementById('export-dd-pdf-button')?.addEventListener('click', () => handleGenericPdfExport(
-                'due-diligence-results-container',
-                'export-dd-pdf-button',
-                'Due Diligence Report'
-            ));
-        }
-
         /**
          * Handles the entity due diligence process.
          */
-        async function handleRunDueDiligence() {
-            const nameInput = document.getElementById('dd-entity-name-input') as HTMLInputElement;
-            const typeSelect = document.getElementById('dd-entity-type-select') as HTMLSelectElement;
-            const contextInput = document.getElementById('dd-context-input') as HTMLTextAreaElement;
-            const button = document.getElementById('run-due-diligence-button') as HTMLButtonElement;
-            const resultsContainer = document.getElementById('due-diligence-results-container');
-            const exportButton = document.getElementById('export-dd-pdf-button');
-
-            if (!nameInput || !typeSelect || !button || !resultsContainer) return;
-            const entityName = nameInput.value.trim();
-            if (!entityName) return;
-            const entityType = typeSelect.value;
-            const context = contextInput?.value.trim() || 'None provided';
-
-            const originalButtonText = button.innerText;
-            button.disabled = true;
-            button.innerHTML = '<div class="spinner"></div> Vetting...';
-            resultsContainer.innerHTML = `<div class="empty-state"><div class="spinner"></div><p>AI is running political, cultural, and reputational due diligence...</p></div>`;
-            if (exportButton) exportButton.style.display = 'none';
-
-            try {
-                const clientName = appState.currentClient?.name || 'our client';
-                const prompt = `
-                    As a Malaysian political and PR due diligence analyst, assess the following entity on behalf of ${clientName}, who is considering an engagement with it.
-
-                    Entity Name: "${entityName}"
-                    Entity Type: ${entityType}
-                    Additional Context: ${context}
-
-                    Provide a comprehensive due diligence assessment considering:
-                    1. Political exposure and coalition dynamics (Pakatan Harapan / Barisan Nasional / Perikatan Nasional / other), and known relationships or affiliations.
-                    2. 3R sensitivities (Race, Religion, Royalty), plus federal-state and Sabah/Sarawak autonomy considerations where relevant.
-                    3. Reputational and integrity red flags (past controversies, conflicts of interest, regulatory issues).
-                    4. Likely reactions from key stakeholder groups (e.g., government, opposition, media, civil society, business community).
-                    5. A clear overall recommendation on whether to proceed with the engagement.
-
-                    Return a single valid JSON object with this exact structure:
-                    {
-                        "overallRiskScore": integer 0-100,
-                        "riskLevel": "Low" | "Medium" | "High" | "Critical",
-                        "recommendation": short actionable recommendation (e.g., "Proceed", "Proceed with Caution", "Enhanced Due Diligence Required", "Decline Engagement"),
-                        "executiveSummary": a paragraph summarizing the overall assessment,
-                        "politicalExposure": {
-                            "coalitionAffiliations": array of objects with "coalition" ("PH", "BN", "PN", or "None/Other") and "strength" ("Strong", "Moderate", "Weak"),
-                            "influenceScore": integer 0-100,
-                            "keyRelationships": array of objects with "name" and "relationship" (brief description)
-                        },
-                        "sensitivityChecks": array of objects, each with "area" (e.g. "Race", "Religion", "Royalty", "Sabah/Sarawak Autonomy", "Federal-State Relations"), "severity" ("Low", "Medium", or "High"), and "details",
-                        "integrityFlags": array of objects, each with "flag" (short title), "severity" ("Low", "Medium", or "High"), and "details". Use an empty array if none found,
-                        "stakeholderReactions": array of objects with "stakeholder" and "reaction" (their likely stance/reaction),
-                        "mitigationStrategies": array of short actionable strings,
-                        "confidenceLevel": integer 0-100
-                    }
-                `;
-
-                const result = await generateJson(prompt);
-                renderDueDiligenceResults(entityName, entityType, result);
-                if (exportButton) exportButton.style.display = 'inline-flex';
-
-            } catch (error) {
-                console.error("Due diligence check failed", error);
-                resultsContainer.innerHTML = `<div class="empty-state">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                    <h3>Due Diligence Failed</h3>
-                    <p class="error-message">Could not process the request. Please try again later.</p>
-                </div>`;
-            } finally {
-                button.disabled = false;
-                button.innerText = originalButtonText;
-            }
-        }
-
         /**
          * Renders the results of the entity due diligence check.
          */
@@ -3451,24 +2660,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- UI Rendering & App Initialization ---
         const viewRenderers: { [key: string]: () => void } = {
             'dashboard-overview-view': renderDashboardView,
-            'nusapulse-map-view': renderNusaPulseMapView,
             'veritas-integrity-view': renderVeritasIntegrityView,
-            'veritas-propagation-view': renderVeritasPropagationView,
             'signal-feed-view': renderSignalFeedView,
             'signal-image-analysis-view': renderSignalImageAnalysisView,
-            'nexus-forecaster-view': renderNexusForecasterView,
-            'aegis-reputation-view': renderAegisReputationView,
             'amplify-comms-view': renderAmplifyCommsView,
             'clients-view': renderClientsView,
             // --- NEW VIEWS ---
-            'signal-video-view': renderSignalVideoView,
-            'signal-video-generation-view': renderSignalVideoGenerationView,
             'veritas-deepfake-view': renderVeritasDeepfakeView,
-            'nusapulse-insights-view': renderNusaPulseInsightsView,
             'nexus-stakeholder-view': renderNexusStakeholderView,
             'aegis-scenario-view': renderAegisScenarioView,
             'amplify-campaign-view': renderAmplifyCampaignView,
-            'duediligence-vetting-view': renderDueDiligenceView,
             'nusapulse-party-tracker-view': renderNusaPulsePartyTrackerView,
             'measure-objectives-view': renderMeasureObjectivesView,
             'measure-methodology-view': renderMeasureMethodologyView,
@@ -3640,8 +2841,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             <ul class="sub-nav-list">
                                 <li><a class="sub-nav-item" data-view="signal-feed-view">Real-Time Feed</a></li>
                                 <li><a class="sub-nav-item" data-view="signal-image-analysis-view">Image Analysis</a></li>
-                                <li><a class="sub-nav-item" data-view="signal-video-view">Video Intelligence</a></li>
-                                <li><a class="sub-nav-item" data-view="signal-video-generation-view">Video Generation</a></li>
                             </ul>
                         </div>
                         <div class="nav-pillar">
@@ -3654,7 +2853,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                              <ul class="sub-nav-list">
                                 <li><a class="sub-nav-item" data-view="veritas-integrity-view">Narrative Integrity</a></li>
-                                <li><a class="sub-nav-item" data-view="veritas-propagation-view">Propagation Map</a></li>
                                 <li><a class="sub-nav-item" data-view="veritas-deepfake-view">Deepfake Detection</a></li>
                             </ul>
                         </div>
@@ -3667,8 +2865,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                  <svg class="nav-item__arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                             </a>
                              <ul class="sub-nav-list">
-                                <li><a class="sub-nav-item" data-view="nusapulse-map-view">Regional Map</a></li>
-                                <li><a class="sub-nav-item" data-view="nusapulse-insights-view">Industry Insights</a></li>
                                 <li><a class="sub-nav-item" data-view="nusapulse-party-tracker-view">Party Sentiment Tracker</a></li>
                             </ul>
                         </div>
@@ -3681,7 +2877,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <svg class="nav-item__arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                             </div>
                              <ul class="sub-nav-list">
-                                <li><a class="sub-nav-item" data-view="nexus-forecaster-view">Policy Forecaster</a></li>
                                 <li><a class="sub-nav-item" data-view="nexus-stakeholder-view">Stakeholder Mapping</a></li>
                             </ul>
                         </div>
@@ -3694,7 +2889,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <svg class="nav-item__arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                             </div>
                              <ul class="sub-nav-list">
-                                <li><a class="sub-nav-item" data-view="aegis-reputation-view">Reputation Command</a></li>
                                 <li><a class="sub-nav-item" data-view="aegis-scenario-view">Scenario Planner</a></li>
                             </ul>
                         </div>
@@ -3711,19 +2905,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <li><a class="sub-nav-item" data-view="amplify-campaign-view">Campaign Builder</a></li>
                             </ul>
                         </div>
-                        <div class="nav-pillar">
-                            <div class="nav-item" data-parent="duediligence">
-                                <div class="nav-item__content">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                                    <span class="nav-item__text">Due Diligence</span>
-                                </div>
-                                <svg class="nav-item__arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                            </div>
-                             <ul class="sub-nav-list">
-                                <li><a class="sub-nav-item" data-view="duediligence-vetting-view">Entity Vetting</a></li>
-                            </ul>
-                        </div>
-                        <div class="nav-pillar">
+                                                <div class="nav-pillar">
                             <div class="nav-item" data-parent="measure">
                                 <div class="nav-item__content">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
@@ -3750,32 +2932,21 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <svg id="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
                                 <svg id="theme-icon-moon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
                             </button>
-                            <div class="user-avatar">
-                                <img src="https://i.pravatar.cc/80" alt="User avatar">
-                            </div>
                         </div>
                     </header>
                     <main class="main-content" id="main-content">
                         <!-- Views are rendered here -->
                         <div id="dashboard-overview-view" class="view"></div>
-                        <div id="nusapulse-map-view" class="view view-hidden"></div>
                         <div id="veritas-integrity-view" class="view view-hidden"></div>
-                        <div id="veritas-propagation-view" class="view view-hidden"></div>
                         <div id="signal-feed-view" class="view view-hidden"></div>
                         <div id="signal-image-analysis-view" class="view view-hidden"></div>
-                        <div id="nexus-forecaster-view" class="view view-hidden"></div>
-                        <div id="aegis-reputation-view" class="view view-hidden"></div>
                         <div id="amplify-comms-view" class="view view-hidden"></div>
                         <div id="clients-view" class="view view-hidden"></div>
                          <!-- NEW VIEWS -->
-                        <div id="signal-video-view" class="view view-hidden"></div>
-                        <div id="signal-video-generation-view" class="view view-hidden"></div>
                         <div id="veritas-deepfake-view" class="view view-hidden"></div>
-                        <div id="nusapulse-insights-view" class="view view-hidden"></div>
                         <div id="nexus-stakeholder-view" class="view view-hidden"></div>
                         <div id="aegis-scenario-view" class="view view-hidden"></div>
                         <div id="amplify-campaign-view" class="view view-hidden"></div>
-                        <div id="duediligence-vetting-view" class="view view-hidden"></div>
                         <div id="measure-objectives-view" class="view view-hidden"></div>
                         <div id="measure-methodology-view" class="view view-hidden"></div>
                         <div id="nusapulse-party-tracker-view" class="view view-hidden"></div>
