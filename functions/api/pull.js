@@ -1,9 +1,11 @@
 import { FEEDS, parseRss, sha256, json } from '../_lib/intel.js';
 import { classify } from '../_lib/classify.js';
+import { gnewsConfigured, fetchGNews } from '../_lib/gnews.js';
 
 const COOLDOWN_SECONDS = 60;      // protects the AI/news quota from button-mashing
 const MAX_CLASSIFY_PER_PULL = 72; // 6 AI calls per pull; backlog is worked off over successive pulls
 const BATCH = 12;
+const GNEWS_COOLDOWN_SECONDS = 5400; // 90 minutes: keeps the free plan (100 requests/day) safe
 export async function onRequestPost({ env }) {
     if (!env.DB || !env.AI) return json({ error: 'Missing D1 (DB) or Workers AI (AI) binding.' }, 500);
 
@@ -25,6 +27,20 @@ export async function onRequestPost({ env }) {
     const failed = fetched.filter((r) => r.status === 'rejected');
     const feedErrorSamples = [...new Set(failed.map((r) => String(r.reason && r.reason.message)))].slice(0, 3);
     const articles = fetched.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+
+    // Optional: GNews, on its own slower schedule because of the plan's daily request cap.
+    let gnews = { configured: false };
+    if (gnewsConfigured(env)) {
+        const lg = await env.DB.prepare("SELECT value FROM meta WHERE key = 'last_gnews'").first();
+        if (lg && now - Number(lg.value) < GNEWS_COOLDOWN_SECONDS) {
+            gnews = { configured: true, skipped: true, nextInSeconds: GNEWS_COOLDOWN_SECONDS - (now - Number(lg.value)) };
+        } else {
+            await env.DB.prepare("INSERT INTO meta (key, value) VALUES ('last_gnews', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(String(now)).run();
+            const g = await fetchGNews(env);
+            articles.push(...g.articles);
+            gnews = { configured: true, found: g.articles.length, errors: g.errors };
+        }
+    }
 
     // 2. De-duplicate within this pull and against what is already stored.
     const unique = new Map();
@@ -72,6 +88,7 @@ export async function onRequestPost({ env }) {
         ok: true,
         fetchedFeeds: FEEDS.length - failed.length,
         failedFeeds: failed.length,
+        gnews,
         feedErrorSamples,
         newItems: fresh.length,
         tagged,

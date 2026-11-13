@@ -3133,6 +3133,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="insights-grid">
                     <div class="card"><div class="card__header"><h3>Data and method</h3></div><div class="card__body"><div class="ai-report-section"><ul>
                         <li><strong>Sources:</strong> RSS feeds from Free Malaysia Today, New Straits Times and Malaysiakini, each linked to the original article. Social: public YouTube comments and Reddit posts through their official APIs, when enabled. No author names are stored, and social posts are deleted after 14 days.</li>
+                        <li><strong>GNews (optional):</strong> when enabled, Malaysian headlines in English, Chinese and Tamil (the service does not support Malay), delayed by up to 12 hours on its free plan. The free plan is for non-commercial use only.</li>
                         <li><strong>Pulling:</strong> on demand and while the Live Feed is open. There is no always-on collection yet, so gaps are possible.</li>
                         <li><strong>AI tagging:</strong> a Cloudflare Workers AI model (Llama 3.3 70B) assigns sector, party, sentiment and audience from the headline only, not the full text.</li>
                         <li><strong>De-duplication:</strong> articles are matched by URL; the same story from different outlets counts separately.</li>
