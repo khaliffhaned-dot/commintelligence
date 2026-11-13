@@ -20,6 +20,9 @@ export async function onRequestGet({ request, env, data }) {
     ]);
     const objectives = await Promise.all(objectivesRaw.map(async (o) => ({ ...o, ...(await computeObjective(env.DB, o)) })));
 
+    const social = await env.DB.prepare('SELECT channel, COUNT(*) AS n FROM social_posts WHERE published_at >= ? GROUP BY channel').bind(since).all().then((x) => x.results);
+    const channels = ['Online news', ...social.filter((s) => s.n > 0).map((s) => (s.channel === 'youtube' ? 'YouTube comments' : 'Reddit'))];
+
     const mix = Object.fromEntries(['Positive', 'Neutral', 'Negative'].map((s) => [s, (bySentiment.find((r) => r.sentiment === s) || {}).n || 0]));
     const tagged = mix.Positive + mix.Neutral + mix.Negative;
     const audienceRows = AUDIENCES.map((a) => {
@@ -32,7 +35,7 @@ export async function onRequestGet({ request, env, data }) {
 
     return json({
         days,
-        outputs: { articles: totals[0].articles, sources: totals[0].sources, bySource: bySource.slice(0, 8), channels: ['Online news'] },
+        outputs: { articles: totals[0].articles, sources: totals[0].sources, bySource: bySource.slice(0, 8), channels },
         outcomes: {
             sentimentMix: mix,
             netSentiment: tagged ? Math.round(((mix.Positive - mix.Negative) / tagged) * 100) : null,

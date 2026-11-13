@@ -982,6 +982,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const feedFilters = { sector: '', party: '', sentiment: '', audience: '' };
+        let feedChannel: 'news' | 'social' = 'news';
 
         /** Asks the backend to fetch + tag new articles. Returns the API response (or null on failure). */
         async function pullLatestNews(): Promise<any> {
@@ -994,7 +995,63 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        /** Asks the backend to collect YouTube comments / Reddit posts (whichever are configured). */
+        async function pullSocialNow(): Promise<any> {
+            try {
+                return await (await apiFetch('/api/pull-social', { method: 'POST' })).json();
+            } catch (e) {
+                console.error('Social pull failed', e);
+                return null;
+            }
+        }
+
+        const SOCIAL_LABELS: { [key: string]: string } = { youtube: 'YouTube', reddit: 'Reddit' };
+
+        async function loadSocialFeed() {
+            const list = document.getElementById('intel-feed-list');
+            const status = document.getElementById('intel-feed-status');
+            if (!list || !status) return null;
+            const qs = new URLSearchParams({ limit: '60' });
+            (Object.keys(feedFilters) as (keyof typeof feedFilters)[]).forEach(k => { if (feedFilters[k]) qs.set(k, feedFilters[k]); });
+            try {
+                const res = await apiFetch(`/api/social?${qs}`);
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                const cfg = data.configured || {};
+                if (!cfg.youtube && !cfg.reddit) {
+                    list.innerHTML = `<div class="card"><div class="card__body">
+                        <h3>Social sources are not switched on yet</h3>
+                        <p>This view collects public YouTube comments and Reddit posts through their official APIs. An administrator needs to add the API credentials to the project first.</p>
+                        <p class="text-secondary">Until then the platform covers online news only.</p></div></div>`;
+                    status.textContent = 'Social: not configured';
+                    return data;
+                }
+                if (!data.items.length) {
+                    list.innerHTML = `<div class="empty-state"><p>No social posts${data.total ? ' match these filters' : ' yet'}. ${data.total ? '' : 'Click <strong>Pull latest</strong> to collect them.'}</p></div>`;
+                } else {
+                    list.innerHTML = data.items.map((it: any) => `
+                        <div class="card signal-mention-card">
+                            <div class="mention-card__header"><div>
+                                <div class="mention-card__source"><span class="trend-badge trend-badge--stable">${escapeHtml(SOCIAL_LABELS[it.channel] || it.channel)}</span> ${escapeHtml(it.label || '')}</div>
+                                <div class="mention-card__timestamp">${timeAgo(it.publishedAt)}${it.score ? ` · ${it.score} ${it.channel === 'youtube' ? 'likes' : 'upvotes'}` : ''}</div>
+                            </div></div>
+                            <p class="mention-card__content"><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(it.text)}</a></p>
+                            <div class="mention-card__footer">
+                                ${it.sentiment ? `<div class="sentiment-tag sentiment-tag--${escapeHtml(it.sentiment.toLowerCase())}">${escapeHtml(it.sentiment)}</div>` : '<div class="sentiment-tag">Untagged</div>'}
+                                <div class="mention-card__author">${escapeHtml([it.sector, it.party && it.party !== 'None' ? it.party : '', it.audience].filter(Boolean).join(' · '))}</div>
+                            </div>
+                        </div>`).join('');
+                }
+                status.textContent = `${data.total} social posts stored (kept ${data.retentionDays} days)${data.lastPull ? ` · last pulled ${timeAgo(data.lastPull)}` : ''}`;
+                return data;
+            } catch (e: any) {
+                list.innerHTML = `<div class="empty-state"><p class="error-message">Could not load social posts: ${escapeHtml(e.message)}</p></div>`;
+                return null;
+            }
+        }
+
         async function loadFeed() {
+            if (feedChannel === 'social') return loadSocialFeed();
             const list = document.getElementById('intel-feed-list');
             const status = document.getElementById('intel-feed-status');
             if (!list || !status) return null;
@@ -1034,14 +1091,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         async function pullAndReload(button?: HTMLButtonElement | null) {
             if (button) { button.disabled = true; button.textContent = 'Pulling…'; }
-            const r = await pullLatestNews();
+            const r = feedChannel === 'social' ? await pullSocialNow() : await pullLatestNews();
             const status = document.getElementById('intel-feed-status');
             if (status) {
                 if (!r || r.error) status.textContent = `Pull failed: ${r?.error || 'network error'}`;
                 else if (r.skipped) status.textContent = `Pulled recently — next pull available in ${r.nextPullInSeconds}s`;
             }
             const data = await loadFeed();
-            if (status && r && r.ok) {
+            if (status && r && r.ok && feedChannel === 'news') {
                 status.textContent = `${r.newItems} new article${r.newItems === 1 ? '' : 's'} · ${data?.total ?? ''} stored`
                     + (r.failedFeeds ? ` · ${r.failedFeeds} source${r.failedFeeds === 1 ? '' : 's'} unavailable` : '');
             }
@@ -1060,6 +1117,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p class="text-secondary" id="intel-feed-status">Loading…</p>
                     </div>
                     <button id="intel-pull-button" class="btn btn--primary">Pull latest</button>
+                </div>
+                <div class="toggle-group" style="margin-bottom:1rem;" id="feed-channel-toggle">
+                    <button class="toggle-btn active" data-channel="news" type="button">News</button>
+                    <button class="toggle-btn" data-channel="social" type="button">Social (YouTube &amp; Reddit)</button>
                 </div>
                 <div class="form-group" style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
                     <select id="feed-filter-sector" class="form-select" style="max-width:260px;">${opt(INTEL_SECTORS, 'All sectors')}</select>
@@ -1080,6 +1141,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const pullBtn = document.getElementById('intel-pull-button') as HTMLButtonElement;
             pullBtn.addEventListener('click', () => pullAndReload(pullBtn));
+            document.querySelectorAll('#feed-channel-toggle .toggle-btn').forEach(b => {
+                b.classList.toggle('active', (b as HTMLElement).dataset.channel === feedChannel);
+                b.addEventListener('click', () => {
+                    feedChannel = (b as HTMLElement).dataset.channel === 'social' ? 'social' : 'news';
+                    document.querySelectorAll('#feed-channel-toggle .toggle-btn').forEach(x => x.classList.toggle('active', x === b));
+                    loadFeed();
+                });
+            });
 
             // Show what we have, pull if stale, then keep checking while this page stays open.
             loadFeed().then(data => {
@@ -3047,7 +3116,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const principles = [
                 ['1', 'Set clear, measurable objectives', 'Measure → Objectives & Impact: objectives with a metric, target, scope and window, tracked against real coverage.', 'Supported'],
                 ['2', 'Define and understand stakeholder audiences', 'Each article is tagged with the stakeholder audience it chiefly concerns, filterable in the Live Feed and reported in Outcomes.', 'Supported (AI-tagged)'],
-                ['3', 'Measure all relevant channels', 'Online news only (Free Malaysia Today, New Straits Times, Malaysiakini). Social, broadcast and forum channels are not yet covered, so results describe news coverage only.', 'Partial'],
+                ['3', 'Measure all relevant channels', 'Online news (Free Malaysia Today, New Straits Times, Malaysiakini) plus YouTube comments and Reddit once an administrator enables them. Facebook, TikTok, X, WhatsApp and broadcast are not covered, so results are not the whole conversation.', 'Partial'],
                 ['4', 'Use qualitative and quantitative analysis', 'Counts, shares and sentiment (quantitative) sit alongside linked source headlines (qualitative). The qualitative read still needs a human analyst.', 'Partial'],
                 ['5', 'Do not use AVEs; judge by outcome and impact', 'The platform computes no advertising value equivalents. Impact is judged against your objectives, not a notional media price.', 'Supported'],
                 ['6', 'Report outputs, outcomes and impact', 'Measure → Objectives & Impact reports all three, exportable as PDF.', 'Supported'],
@@ -3063,7 +3132,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="card__body" style="overflow-x:auto;"><table class="measure-table"><thead><tr><th>#</th><th>Principle and how it is applied</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>
                 <div class="insights-grid">
                     <div class="card"><div class="card__header"><h3>Data and method</h3></div><div class="card__body"><div class="ai-report-section"><ul>
-                        <li><strong>Sources:</strong> RSS feeds from Free Malaysia Today, New Straits Times and Malaysiakini. Each item links to the original article.</li>
+                        <li><strong>Sources:</strong> RSS feeds from Free Malaysia Today, New Straits Times and Malaysiakini, each linked to the original article. Social: public YouTube comments and Reddit posts through their official APIs, when enabled. No author names are stored, and social posts are deleted after 14 days.</li>
                         <li><strong>Pulling:</strong> on demand and while the Live Feed is open. There is no always-on collection yet, so gaps are possible.</li>
                         <li><strong>AI tagging:</strong> a Cloudflare Workers AI model (Llama 3.3 70B) assigns sector, party, sentiment and audience from the headline only, not the full text.</li>
                         <li><strong>De-duplication:</strong> articles are matched by URL; the same story from different outlets counts separately.</li>

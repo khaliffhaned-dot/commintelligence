@@ -1,43 +1,9 @@
-import { FEEDS, SECTORS, PARTIES, SENTIMENTS, AUDIENCES, parseRss, sha256, extractJson, json } from '../_lib/intel.js';
+import { FEEDS, parseRss, sha256, json } from '../_lib/intel.js';
+import { classify } from '../_lib/classify.js';
 
 const COOLDOWN_SECONDS = 60;      // protects the AI/news quota from button-mashing
 const MAX_CLASSIFY_PER_PULL = 72; // 6 AI calls per pull; backlog is worked off over successive pulls
 const BATCH = 12;
-const TEXT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-
-async function classify(env, batch) {
-    const list = batch.map((it, i) => `${i}. ${it.title}`).join('\n');
-    const prompt = `Classify these Malaysian news headlines.
-For each, return:
-- "sector": one of ${JSON.stringify(SECTORS)}
-- "party": the Malaysian political coalition the story is mainly about, one of ${JSON.stringify(PARTIES)} (BN, PH, PN, GPS, GRS, Other = another political party/figure, None = not political)
-- "sentiment": tone toward the story's main subject, one of ${JSON.stringify(SENTIMENTS)}
-- "audience": the stakeholder audience the story chiefly concerns, one of ${JSON.stringify(AUDIENCES)}
-Headlines:
-${list}
-Return only JSON: {"results":[{"i":0,"sector":"...","party":"...","sentiment":"...","audience":"..."}]}`;
-    const out = await env.AI.run(env.AI_TEXT_MODEL || TEXT_MODEL, {
-        messages: [
-            { role: 'system', content: 'You are a precise media analyst for Malaysia. Reply with one valid JSON object only.' },
-            { role: 'user', content: prompt },
-        ],
-        max_tokens: 2048,
-    });
-    const raw = out && out.response !== undefined ? out.response : out;
-    const parsed = raw && typeof raw === 'object' ? raw : extractJson(raw);
-    const results = Array.isArray(parsed.results) ? parsed.results : [];
-    const byIndex = new Map(results.map((r) => [Number(r.i), r]));
-    return batch.map((_, i) => {
-        const r = byIndex.get(i) || {};
-        return {
-            sector: SECTORS.includes(r.sector) ? r.sector : null,
-            party: PARTIES.includes(r.party) ? r.party : null,
-            sentiment: SENTIMENTS.includes(r.sentiment) ? r.sentiment : null,
-            audience: AUDIENCES.includes(r.audience) ? r.audience : null,
-        };
-    });
-}
-
 export async function onRequestPost({ env }) {
     if (!env.DB || !env.AI) return json({ error: 'Missing D1 (DB) or Workers AI (AI) binding.' }, 500);
 
@@ -92,7 +58,7 @@ export async function onRequestPost({ env }) {
     for (let i = 0; i < pending.length; i += BATCH) {
         const batch = pending.slice(i, i + BATCH);
         try {
-            const tags = await classify(env, batch);
+            const tags = await classify(env, batch.map((b) => ({ text: b.title })));
             await env.DB.batch(batch.map((it, j) => update.bind(tags[j].sector, tags[j].party, tags[j].sentiment, tags[j].audience, it.id)));
             tagged += batch.length;
         } catch (e) {
