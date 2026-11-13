@@ -15,11 +15,11 @@ const RATE_PER_ORG_PER_HOUR = 120;
 const STOP = new Set(['return', 'valid', 'object', 'objects', 'following', 'string', 'strings', 'array', 'integer', 'integers', 'generate', 'please', 'should',
     'provide', 'include', 'using', 'about', 'their', 'which', 'these', 'those', 'would', 'could', 'there', 'where', 'analysis', 'analyze', 'report', 'based',
     'example', 'single', 'brief', 'short', 'short', 'concise', 'detailed', 'paragraph', 'keys', 'structure', 'exactly', 'each', 'with', 'plausible', 'realistic',
-    'current', 'recent', 'malaysia', 'malaysian', 'strategy', 'sentiment', 'overall', 'summary', 'context', 'response', 'items', 'list', 'write', 'create']);
+    'current', 'recent', 'malaysia', 'malaysian', 'strategy', 'sentiment', 'overall', 'summary', 'context', 'response', 'items', 'list', 'write', 'create', 'from', 'that', 'this', 'with', 'have', 'will', 'your', 'make', 'keys', 'into', 'than', 'then', 'them', 'such', 'also', 'only', 'more', 'most', 'some', 'were', 'what', 'when', 'must', 'been', 'does', 'each', 'long', 'text', 'name', 'type', 'case', 'role', 'plan', 'data', 'high', 'good', 'like', 'main', 'next', 'time', 'user', 'view']);
 
 /** Recent real headlines relevant to the prompt (keyword matches first, then the newest), so generated text can lean on facts. */
 async function groundingHeadlines(env, prompt) {
-    const words = [...new Set(prompt.toLowerCase().match(/[a-z]{5,}/g) || [])].filter((w) => !STOP.has(w)).slice(0, 6);
+    const words = [...new Set(prompt.toLowerCase().match(/[a-z]{4,}/g) || [])].filter((w) => !STOP.has(w)).slice(0, 6);
     const rows = [];
     if (words.length) {
         const where = words.map(() => 'LOWER(title) LIKE ?').join(' OR ');
