@@ -989,7 +989,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 const prompt = `
-                    You are a public relations content strategist. For the client "${appState.currentClient.name}", generate content ideas based on the angle: "${angle}".
+                    You are a public relations content strategist. For the client "${appState.currentClient?.name || 'the organisation'}", generate content ideas based on the angle: "${angle}".
                     Provide two distinct ideas.
                     Return a single valid JSON object with two keys:
                     1. "pressRelease": A creative headline and one-sentence summary for a press release.
@@ -1439,6 +1439,11 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const clientsJson = localStorage.getItem(CLIENTS_STORAGE_KEY);
                 let clients: Client[] = clientsJson ? JSON.parse(clientsJson) : [];
+
+                // One-time cleanup: earlier versions pre-filled a demo client that is still saved in some browsers.
+                const before = clients.length;
+                clients = clients.filter(c => !(c.id === 'prsm-01' && c.name === 'Public Relations Practitioners Society of Malaysia' && c.industry === 'Professional Association'));
+                if (clients.length !== before) localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(clients));
 
                 appState.clients = clients;
 
