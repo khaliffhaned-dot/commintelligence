@@ -1,4 +1,5 @@
 import { SECTORS, PARTIES, SENTIMENTS, AUDIENCES, extractJson } from './intel.js';
+import { runAI } from './airun.js';
 
 const TEXT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
@@ -17,7 +18,7 @@ For each, return:
 Texts:
 ${list}
 Return only JSON: {"results":[{"i":0,"sector":"...","party":"...","sentiment":"...","audience":"..."}]}`;
-    const out = await env.AI.run(env.AI_TEXT_MODEL || TEXT_MODEL, {
+    const out = await runAI(env, env.AI_TEXT_MODEL || TEXT_MODEL, {
         messages: [
             { role: 'system', content: 'You are a precise media analyst for Malaysia. Reply with one valid JSON object only.' },
             { role: 'user', content: prompt },
