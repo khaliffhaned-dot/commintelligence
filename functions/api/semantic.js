@@ -9,9 +9,11 @@ export async function onRequestGet({ request, env, data }) {
     if (!semanticAvailable(env)) return json({ available: false, items: [] });
     try {
         const t0 = Date.now();
-        const items = await semanticSearch(env, q, 20);
+        const minParam = parseFloat(new URL(request.url).searchParams.get('min'));
+        const diag = {};
+        const items = await semanticSearch(env, q, 20, Number.isFinite(minParam) ? Math.min(Math.max(minParam, 0), 1) : undefined, diag);
         track(env, 'semantic_search', [], [items.length, Date.now() - t0], data && data.auth ? data.auth.org.id : 'system');
-        return json({ available: true, items }, 200, { 'Cache-Control': 'no-store' });
+        return json({ available: true, items, diag }, 200, { 'Cache-Control': 'no-store' });
     } catch (e) {
         console.error('semantic search failed', e && e.message);
         return json({ available: false, items: [], error: 'Semantic search is temporarily unavailable.' });

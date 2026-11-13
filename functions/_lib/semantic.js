@@ -30,11 +30,12 @@ export async function embedPending(env, limit = 160) {
 }
 
 /** Most similar stored articles to a query, with a 0-1 similarity score. */
-export async function semanticSearch(env, query, topK = 20) {
+export async function semanticSearch(env, query, topK = 20, minScore = MIN_SCORE, diag = null) {
     if (!semanticAvailable(env)) return [];
     const [vec] = await embedTexts(env, [query]);
     const res = await env.VECTORIZE.query(vec, { topK, returnMetadata: 'none' });
-    const matches = (res.matches || []).filter((m) => m.score >= MIN_SCORE);
+    if (diag) { diag.raw = (res.matches || []).length; diag.topScore = res.matches && res.matches[0] ? res.matches[0].score : null; }
+    const matches = (res.matches || []).filter((m) => m.score >= minScore);
     if (!matches.length) return [];
     const ids = matches.map((m) => m.id);
     const { results } = await env.DB.prepare(
