@@ -14,6 +14,9 @@ async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> 
     return res;
 }
 
+// Lets the UI tell the user how many real headlines an AI draft was grounded in.
+const aiNotice: { handler: ((grounded: number) => void) | null } = { handler: null };
+
 /**
  * Calls the Cloudflare Pages Function at /api/ai, which holds HUNYUAN_API_KEY
  * server-side, forwards the request to Hunyuan and returns the parsed JSON object.
@@ -42,6 +45,7 @@ async function generateJson(prompt: string, imageParts?: { mimeType: string, dat
     if (body.error) {
         throw new Error(body.error);
     }
+    aiNotice.handler?.(typeof body.grounded === 'number' ? body.grounded : 0);
     return body.result;
 }
 
@@ -1311,6 +1315,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 4000);
         }
 
+        aiNotice.handler = (n) => showToast(n > 0 ? `AI draft grounded in ${n} recent real headlines. Review before use.` : 'AI draft with no matching live headlines. Review before use.');
+
         function showConfirmationModal(message: string, onConfirm: () => void) {
             const overlay = document.getElementById('confirmation-modal-overlay');
             const messageEl = document.getElementById('confirmation-modal-message');
@@ -2560,6 +2566,168 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // --- LIVE-DATA MODULES: regional map, sector insights, entity search, reputation monitor ---
+        // Everything here is computed from real stored coverage. Nothing is invented.
+        const netOf = (pos: number, neg: number, n: number) => (n ? Math.round(((pos - neg) / n) * 100) : null);
+        const netBadge = (net: number | null) => net === null
+            ? '<span class="trend-badge trend-badge--stable">no tags</span>'
+            : `<span class="trend-badge trend-badge--${net > 5 ? 'rising' : net < -5 ? 'declining' : 'stable'}">Net ${net > 0 ? '+' : ''}${net}</span>`;
+        const themeColor = (v: string, fallback: string) => getComputedStyle(document.body).getPropertyValue(v).trim() || fallback;
+        const sentimentColor = (net: number | null) => net === null ? themeColor('--text-secondary', '#888888')
+            : net > 5 ? themeColor('--success', '#2e9e6b') : net < -5 ? themeColor('--danger', '#d64550') : themeColor('--warning', '#e0a030');
+        const loadingHtml = (msg: string) => `<div class="empty-state"><div class="spinner"></div><p>${msg}</p></div>`;
+        const errorHtml = (msg: string) => `<div class="empty-state"><p class="error-message">${escapeHtml(msg)}</p></div>`;
+        const headlineLi = (h: any) => `<li class="dash-headline"><a href="${escapeHtml(h.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(h.title)}</a><div class="text-secondary">${escapeHtml(h.source)} · ${timeAgo(h.publishedAt)}</div></li>`;
+
+        /** NusaPulse: Regional Map, from headlines that name a Malaysian state or federal territory. */
+        async function renderRegionalMapView() {
+            const container = document.getElementById('nusapulse-map-view');
+            if (!container) return;
+            container.innerHTML = loadingHtml('Mapping coverage by state…');
+            let d: any;
+            try {
+                d = await (await apiFetch('/api/regions?days=7')).json();
+                if (d.error) throw new Error(d.error);
+            } catch (e: any) { container.innerHTML = errorHtml('Could not load regional coverage: ' + e.message); return; }
+
+            const rows = [...d.regions].sort((a: any, b: any) => b.total - a.total);
+            const listHtml = rows.filter((r: any) => r.total).map((r: any) => `
+                <li class="region-row"><div><strong>${escapeHtml(r.name)}</strong><div class="text-secondary">${r.total} article${r.total === 1 ? '' : 's'}</div></div>${netBadge(netOf(r.pos, r.neg, r.tagged))}</li>`).join('')
+                || '<li class="text-secondary">No headlines in the last 7 days name a state. Pull the latest news first.</li>';
+
+            container.innerHTML = `
+                <div class="view-header"><div>
+                    <h2>NusaPulse: Regional Map</h2>
+                    <p class="text-secondary">Coverage by state and federal territory over the last ${d.days} days. ${d.matched} of ${d.totalArticles} stored articles name a state.</p>
+                </div></div>
+                <div class="region-layout">
+                    <div class="card"><div class="card__body"><div id="region-map" style="height:520px; border-radius: 8px;"></div></div></div>
+                    <div class="card"><div class="card__header"><h3>Most covered</h3></div><div class="card__body"><ul class="dash-list">${listHtml}</ul></div></div>
+                </div>
+                <p class="text-secondary" style="margin-top:1rem;">Counts come only from headlines that name the place, so national stories are not shown here. A story naming several states counts for each. Circle size is coverage volume; colour is net sentiment. Marker positions are approximate state centres.</p>`;
+
+            if (appState.mapInstance) { try { appState.mapInstance.remove(); } catch { /* already gone */ } appState.mapInstance = null; }
+            if (typeof L === 'undefined') return;
+            const map = L.map('region-map').setView([4.2, 108], 6);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap contributors &copy; CARTO', maxZoom: 18 }).addTo(map);
+            d.regions.filter((r: any) => r.total).forEach((r: any) => {
+                const col = sentimentColor(netOf(r.pos, r.neg, r.tagged));
+                const popup = `<strong>${escapeHtml(r.name)}</strong><br>${r.total} articles · ${r.tagged ? 'net ' + netOf(r.pos, r.neg, r.tagged) : 'not yet tagged'}<ul style="padding-left:1rem;margin:0.4rem 0 0;">${r.latest.map((h: any) => `<li><a href="${escapeHtml(h.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(h.title)}</a></li>`).join('')}</ul>`;
+                L.circleMarker([r.lat, r.lng], { radius: 8 + Math.sqrt(r.total) * 3, color: col, fillColor: col, fillOpacity: 0.55, weight: 2 }).addTo(map).bindPopup(popup, { maxWidth: 320 });
+            });
+            appState.mapInstance = map;
+            setTimeout(() => map.invalidateSize(), 50);
+        }
+
+        /** NusaPulse: Industry Insights, from stored sector statistics. */
+        async function renderSectorInsightsView() {
+            const container = document.getElementById('nusapulse-insights-view');
+            if (!container) return;
+            container.innerHTML = loadingHtml('Loading sector statistics…');
+            let d: any;
+            try {
+                d = await (await apiFetch('/api/sectors')).json();
+                if (d.error) throw new Error(d.error);
+            } catch (e: any) { container.innerHTML = errorHtml('Could not load sector statistics: ' + e.message); return; }
+
+            const rows = d.sectors.map((r: any) => {
+                const change = d.hasPrior && r.prevN ? Math.round(((r.n - r.prevN) / r.prevN) * 100) : null;
+                return `<tr>
+                    <td><strong>${escapeHtml(r.sector)}</strong></td><td>${r.n}</td>
+                    <td>${r.pos} / ${r.neu} / ${r.neg}</td><td>${netBadge(netOf(r.pos, r.neg, r.n))}</td>
+                    <td>${change === null ? '<span class="text-secondary">after 2 weeks of data</span>' : (change >= 0 ? '▲ ' : '▼ ') + Math.abs(change) + '%'}</td>
+                    <td><button class="btn btn--secondary" data-sector="${escapeHtml(r.sector)}">Headlines</button></td></tr>
+                    <tr class="sector-detail hidden" data-detail="${escapeHtml(r.sector)}"><td colspan="6"></td></tr>`;
+            }).join('') || '<tr><td colspan="6" class="text-secondary">No tagged coverage yet. Pull the latest news first.</td></tr>';
+
+            container.innerHTML = `
+                <div class="view-header"><div>
+                    <h2>NusaPulse: Industry Insights</h2>
+                    <p class="text-secondary">Coverage and sentiment by sector over the last 7 days, from real stored articles tagged by AI.</p>
+                </div></div>
+                <div class="card"><div class="card__body" style="overflow-x:auto;">
+                    <table class="measure-table"><thead><tr><th>Sector</th><th>Articles</th><th>Pos / Neu / Neg</th><th>Net sentiment</th><th>Change vs previous week</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+                </div></div>
+                <p class="text-secondary" style="margin-top:1rem;">The week-on-week change appears once the platform has collected at least two weeks of data.</p>`;
+
+            container.querySelectorAll('[data-sector]').forEach(btn => btn.addEventListener('click', async () => {
+                const sector = (btn as HTMLElement).dataset.sector || '';
+                const row = Array.from(container.querySelectorAll('.sector-detail')).find(r => (r as HTMLElement).dataset.detail === sector) as HTMLElement | undefined;
+                if (!row) return;
+                const cell = row.firstElementChild as HTMLElement;
+                if (!row.classList.contains('hidden')) { row.classList.add('hidden'); return; }
+                row.classList.remove('hidden');
+                cell.innerHTML = '<span class="text-secondary">Loading…</span>';
+                try {
+                    const f = await (await apiFetch(`/api/feed?sector=${encodeURIComponent(sector)}&limit=6`)).json();
+                    cell.innerHTML = `<ul class="dash-list">${(f.items || []).map(headlineLi).join('') || '<li class="text-secondary">No headlines.</li>'}</ul>`;
+                } catch { cell.innerHTML = '<span class="error-message">Could not load headlines.</span>'; }
+            }));
+        }
+
+        /** Searches the platform's stored coverage for a name. Shared by Entity Search and Reputation Monitor. */
+        async function runCoverageSearch(q: string, out: HTMLElement) {
+            out.innerHTML = loadingHtml('Searching stored coverage…');
+            let d: any;
+            try {
+                d = await (await apiFetch(`/api/search?q=${encodeURIComponent(q)}`)).json();
+                if (d.error) throw new Error(d.error);
+            } catch (e: any) { out.innerHTML = errorHtml(e.message); return; }
+
+            const tagged = d.tally.Positive + d.tally.Neutral + d.tally.Negative;
+            const oldest = d.corpus.oldest ? new Date(d.corpus.oldest * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'n/a';
+            const newsHtml = d.news.map((n: any) => `<li class="dash-headline"><a href="${escapeHtml(n.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(n.title)}</a>
+                <div class="text-secondary">${escapeHtml(n.source)} · ${timeAgo(n.publishedAt)}${n.sector ? ' · ' + escapeHtml(n.sector) : ''}${n.sentiment ? ` · <span class="sentiment-tag sentiment-tag--${escapeHtml(n.sentiment.toLowerCase())}">${escapeHtml(n.sentiment)}</span>` : ''}</div></li>`).join('');
+            const socialHtml = d.social.map((s: any) => `<li class="dash-headline"><a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.text)}</a>
+                <div class="text-secondary">${escapeHtml(s.channel)} · ${escapeHtml(s.label || '')} · ${timeAgo(s.publishedAt)}</div></li>`).join('');
+
+            out.innerHTML = `
+                <div class="kpi-grid">
+                    <div class="card kpi"><div class="kpi__label">Articles mentioning “${escapeHtml(d.q)}”</div><div class="kpi__value">${d.news.length}${d.news.length === 60 ? '+' : ''}</div><div class="kpi__sub">headline matches</div></div>
+                    <div class="card kpi"><div class="kpi__label">Net sentiment</div><div class="kpi__value">${tagged ? (netOf(d.tally.Positive, d.tally.Negative, tagged)! > 0 ? '+' : '') + netOf(d.tally.Positive, d.tally.Negative, tagged) : '—'}</div><div class="kpi__sub">${d.tally.Positive} positive · ${d.tally.Neutral} neutral · ${d.tally.Negative} negative</div></div>
+                    <div class="card kpi"><div class="kpi__label">Social mentions</div><div class="kpi__value">${d.social.length}</div><div class="kpi__sub">YouTube / Reddit, if connected</div></div>
+                </div>
+                <div class="card" style="margin-bottom:1rem;"><div class="card__header"><h3>News</h3></div><div class="card__body"><ul class="dash-list">${newsHtml || '<li class="text-secondary">No stored headlines mention this name.</li>'}</ul></div></div>
+                ${d.social.length ? `<div class="card" style="margin-bottom:1rem;"><div class="card__header"><h3>Social</h3></div><div class="card__body"><ul class="dash-list">${socialHtml}</ul></div></div>` : ''}
+                <p class="text-secondary">Searched ${d.corpus.articles} stored articles, going back to ${oldest}. <strong>No result here does not mean no risk</strong>: this covers only the news the platform collects, and it is not a background check.</p>`;
+        }
+
+        function renderCoverageSearch(container: HTMLElement, title: string, subtitle: string, preset: string, autoRun: boolean) {
+            container.innerHTML = `
+                <div class="view-header"><div><h2>${title}</h2><p class="text-secondary">${subtitle}</p></div></div>
+                <div class="card" style="margin-bottom:1rem;"><div class="card__body">
+                    <form class="coverage-form" novalidate>
+                        <input class="form-input coverage-input" maxlength="80" placeholder="Person, company or topic" value="${escapeHtml(preset)}">
+                        <button class="btn btn--primary" type="submit">Search coverage</button>
+                    </form>
+                </div></div>
+                <div class="coverage-results"></div>`;
+            const form = container.querySelector('.coverage-form') as HTMLFormElement;
+            const input = container.querySelector('.coverage-input') as HTMLInputElement;
+            const out = container.querySelector('.coverage-results') as HTMLElement;
+            form.addEventListener('submit', (e) => { e.preventDefault(); if (input.value.trim().length >= 2) runCoverageSearch(input.value.trim(), out); });
+            if (autoRun && preset) runCoverageSearch(preset, out);
+        }
+
+        /** Due Diligence: Entity Search (real stored coverage only). */
+        function renderEntitySearchView() {
+            const container = document.getElementById('duediligence-vetting-view');
+            if (container) renderCoverageSearch(container, 'Due Diligence: Entity Search', 'Find what Malaysian news the platform has stored about a person, company or topic. Every result links to its source.', '', false);
+        }
+
+        /** Aegis: Reputation Monitor for the current client, from real stored coverage. */
+        function renderReputationMonitorView() {
+            const container = document.getElementById('aegis-reputation-view');
+            if (!container) return;
+            if (!appState.currentClient) {
+                container.innerHTML = `<div class="view-header"><div><h2>Aegis: Reputation Monitor</h2></div></div>
+                    <div class="empty-state"><p>Add a client to monitor how Malaysian news covers them.</p><button id="rep-add-client" class="btn btn--primary">Add a client</button></div>`;
+                document.getElementById('rep-add-client')?.addEventListener('click', () => switchView('clients-view'));
+                return;
+            }
+            renderCoverageSearch(container, 'Aegis: Reputation Monitor', `Real news coverage mentioning ${escapeHtml(appState.currentClient.name)}, with sentiment from the platform's AI tagging.`, appState.currentClient.name, true);
+        }
+
         // --- ACCOUNTS: sign-in screen, session check, user menu ---
         function showAuthOverlay(onSuccess: () => void) {
             document.getElementById('auth-overlay')?.remove();
@@ -2665,6 +2833,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- UI Rendering & App Initialization ---
         const viewRenderers: { [key: string]: () => void } = {
             'dashboard-overview-view': renderDashboardView,
+            'nusapulse-map-view': renderRegionalMapView,
+            'nusapulse-insights-view': renderSectorInsightsView,
+            'aegis-reputation-view': renderReputationMonitorView,
+            'duediligence-vetting-view': renderEntitySearchView,
             'veritas-integrity-view': renderVeritasIntegrityView,
             'signal-feed-view': renderSignalFeedView,
             'signal-image-analysis-view': renderSignalImageAnalysisView,
@@ -2870,6 +3042,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                  <svg class="nav-item__arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                             </a>
                              <ul class="sub-nav-list">
+                                <li><a class="sub-nav-item" data-view="nusapulse-map-view">Regional Map</a></li>
+                                <li><a class="sub-nav-item" data-view="nusapulse-insights-view">Industry Insights</a></li>
                                 <li><a class="sub-nav-item" data-view="nusapulse-party-tracker-view">Party Sentiment Tracker</a></li>
                             </ul>
                         </div>
@@ -2894,6 +3068,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <svg class="nav-item__arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                             </div>
                              <ul class="sub-nav-list">
+                                <li><a class="sub-nav-item" data-view="aegis-reputation-view">Reputation Monitor</a></li>
                                 <li><a class="sub-nav-item" data-view="aegis-scenario-view">Scenario Planner</a></li>
                             </ul>
                         </div>
@@ -2911,6 +3086,18 @@ document.addEventListener('DOMContentLoaded', () => {
                             </ul>
                         </div>
                                                 <div class="nav-pillar">
+                            <div class="nav-item" data-parent="duediligence">
+                                <div class="nav-item__content">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                    <span class="nav-item__text">Due Diligence</span>
+                                </div>
+                                <svg class="nav-item__arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </div>
+                            <ul class="sub-nav-list">
+                                <li><a class="sub-nav-item" data-view="duediligence-vetting-view">Entity Search</a></li>
+                            </ul>
+                        </div>
+                        <div class="nav-pillar">
                             <div class="nav-item" data-parent="measure">
                                 <div class="nav-item__content">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
@@ -2942,6 +3129,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     <main class="main-content" id="main-content">
                         <!-- Views are rendered here -->
                         <div id="dashboard-overview-view" class="view"></div>
+                        <div id="nusapulse-map-view" class="view view-hidden"></div>
+                        <div id="nusapulse-insights-view" class="view view-hidden"></div>
+                        <div id="aegis-reputation-view" class="view view-hidden"></div>
+                        <div id="duediligence-vetting-view" class="view view-hidden"></div>
                         <div id="veritas-integrity-view" class="view view-hidden"></div>
                         <div id="signal-feed-view" class="view view-hidden"></div>
                         <div id="signal-image-analysis-view" class="view view-hidden"></div>

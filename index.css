@@ -1031,3 +1031,12 @@ html { scroll-behavior: smooth; }
 .cta-band { text-align: center; padding: 4.5rem 2rem; background: var(--surface); border-top: 1px solid var(--border-color); }
 .cta-band h2 { font-size: 2.2rem; font-weight: 800; margin-bottom: 0.5rem; }
 .cta-band p { color: var(--text-secondary); margin-bottom: 1.5rem; }
+
+/* Live-data modules */
+.region-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+@media (max-width: 1000px) { .region-layout { grid-template-columns: minmax(0, 1fr); } }
+.region-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.coverage-form { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.coverage-input { flex: 1 1 260px; }
+.sector-detail td { background: var(--surface-light); }
+.sector-detail.hidden { display: none; }
